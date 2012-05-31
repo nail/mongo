@@ -1122,6 +1122,11 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
                 out() << "--txnMemLimit cannot be greater than 2MB" << endl;
                 dbexit( EXIT_BADOPTIONS );
             }
+
+            if (cmdLine.dur && !str::startsWith(repairpath, dbpath)) {
+                out() << "You must use a --repairpath that is a subdirectory of --dbpath when using journaling" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
         }
         if (params.count("nohints")) {
             useHints = false;
