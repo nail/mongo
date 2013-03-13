@@ -659,9 +659,9 @@ namespace mongo {
         _global->ForceSet(v8StringData(field), v8::Number::New(val));
     }
 
-    void V8Scope::setString(const char * field, const char * val) {
+    void V8Scope::setString(const char * field, const StringData& val) {
         V8_SIMPLE_HEADER
-        _global->ForceSet(v8StringData(field), v8::String::New(val));
+        _global->ForceSet(v8StringData(field), v8::String::New(val.rawData(), val.size()));
     }
 
     void V8Scope::setBoolean(const char * field, bool val) {
@@ -964,8 +964,9 @@ namespace mongo {
         string fn = str::stream() << "_funcs" << functionNumber;
         code = str::stream() << fn << " = " << code;
 
-        v8::Handle<v8::Script> script = v8::Script::Compile(v8::String::New(code.c_str()),
-                                        v8::String::New(fn.c_str()));
+        v8::Handle<v8::Script> script = v8::Script::Compile(
+                                            v8::String::New(code.c_str(), code.length()),
+                                            v8::String::New(fn.c_str()));
 
         // throw on error
         checkV8ErrorState(script, try_catch);
@@ -1079,7 +1080,7 @@ namespace mongo {
 
         v8::Handle<v8::Script> script =
                 v8::Script::Compile(v8::String::New(code.rawData(), code.size()),
-                                    v8::String::New(name.c_str()));
+                                    v8::String::New(name.c_str(), name.length()));
 
         if (checkV8ErrorState(script, try_catch, reportError, assertOnError))
             return false;
@@ -1316,12 +1317,13 @@ namespace mongo {
         registerOpId();
     }
 
-    v8::Local<v8::Value> V8Scope::newFunction(const char *code) {
+    v8::Local<v8::Value> V8Scope::newFunction(const StringData& code) {
         v8::HandleScope handle_scope;
         v8::TryCatch try_catch;
         string codeStr = str::stream() << "____MongoToV8_newFunction_temp = " << code;
 
-        v8::Local<v8::Script> compiled = v8::Script::New(v8::String::New(codeStr.c_str()));
+        v8::Local<v8::Script> compiled = v8::Script::New(v8::String::New(codeStr.c_str(),
+                                                                         codeStr.length()));
 
         // throw on compile error
         checkV8ErrorState(compiled, try_catch);
@@ -1338,7 +1340,8 @@ namespace mongo {
         v8::HandleScope handle_scope;
         v8::Handle<v8::Function> idCons = ObjectIdFT()->GetFunction();
         v8::Handle<v8::Value> argv[1];
-        argv[0] = v8::String::New(id.str().c_str());
+        const string& idString = id.str();
+        argv[0] = v8::String::New(idString.c_str(), idString.length());
         return handle_scope.Close(idCons->NewInstance(1, argv));
     }
 
@@ -1383,14 +1386,14 @@ namespace mongo {
 
         switch (elem.type()) {
         case mongo::Code:
-            return newFunction(elem.valuestr());
+            return newFunction(StringData(elem.valuestr(), elem.valuestrsize() - 1));
         case CodeWScope:
             if (!elem.codeWScopeObject().isEmpty())
                 log() << "warning: CodeWScope doesn't transfer to db.eval" << endl;
-            return newFunction(elem.codeWScopeCode());
+            return newFunction(StringData(elem.codeWScopeCode(), elem.codeWScopeCodeLen() - 1));
         case mongo::Symbol:
         case mongo::String:
-            return v8::String::New(elem.valuestr());
+            return v8::String::New(elem.valuestr(), elem.valuestrsize() - 1);
         case mongo::jstOID:
             return newId(elem.__oid());
         case mongo::NumberDouble:
