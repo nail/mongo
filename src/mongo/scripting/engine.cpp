@@ -39,6 +39,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/scripting/bench.h"
 #include "mongo/util/file.h"
+#include "mongo/util/text.h"
 
 namespace mongo {
     long long Scope::_lastVersion = 1;
@@ -108,8 +109,11 @@ namespace mongo {
 
     bool Scope::execFile(const string& filename, bool printResult, bool reportError,
                          int timeoutMs) {
-
+#ifdef _WIN32
+        boost::filesystem::path p(toWideString(filename.c_str()));
+#else
         boost::filesystem::path p(filename);
+#endif
         if (!exists(p)) {
             log() << "file [" << filename << "] doesn't exist" << endl;
             return false;
@@ -125,7 +129,7 @@ namespace mongo {
                 boost::filesystem::path sub(*it);
                 if (!endsWith(sub.string().c_str(), ".js"))
                     continue;
-                if (!execFile(sub.string().c_str(), printResult, reportError, timeoutMs))
+                if (!execFile(sub.string(), printResult, reportError, timeoutMs))
                     return false;
             }
 
