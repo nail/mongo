@@ -180,6 +180,9 @@ namespace mongo {
      */
     class Socket : boost::noncopyable {
     public:
+
+        static const int errorPollIntervalSecs;
+
         Socket(int sock, const SockAddr& farEnd);
 
         /** In some cases the timeout will actually be 2x this value - eg we do a partial send,
@@ -214,6 +217,7 @@ namespace mongo {
         long long getBytesOut() const { return _bytesOut; }
         
         void setTimeout( double secs );
+        bool isStillConnected();
 
 #ifdef MONGO_SSL
         /** secures inline */
@@ -259,6 +263,7 @@ namespace mongo {
 
         long long _bytesIn;
         long long _bytesOut;
+        time_t _lastValidityCheckAtSecs;
 
 #ifdef MONGO_SSL
         SSL* _ssl;

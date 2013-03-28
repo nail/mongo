@@ -149,8 +149,8 @@ namespace mongo {
     }
 
     bool PoolForHost::StoredConnection::ok( time_t now ) {
-        // if connection has been idle for 30 minutes, kill it
-        return ( now - when ) < 1800;
+        // Poke the connection to see if we're still ok
+        return conn->isStillConnected();
     }
 
     void PoolForHost::createdOne( DBClientBase * base) {
