@@ -22,6 +22,7 @@
 
 #include <boost/scoped_ptr.hpp>
 #include <string>
+#include <sasl/sasl.h>
 
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
@@ -30,9 +31,11 @@
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/sasl_client_session.h"
 #include "mongo/platform/cstdint.h"
+#include "mongo/util/allocator.h"
 #include "mongo/util/base64.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/net/hostandport.h"
 
 namespace mongo {
