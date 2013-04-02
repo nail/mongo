@@ -85,6 +85,12 @@ namespace mongo {
     class AtomicIntrinsics<T, typename boost::enable_if_c<sizeof(T) == sizeof(LONGLONG)>::type> {
     public:
 
+#if defined(NTDDI_VERSION) && defined(NTDDI_VISTA) && (NTDDI_VERSION >= NTDDI_VISTA)
+        static const bool kHaveInterlocked64 = true;
+#else
+        static const bool kHaveInterlocked64 = false;
+#endif
+
         static T compareAndSwap(volatile T* dest, T expected, T newValue) {
             return InterlockedCompareExchange64(reinterpret_cast<volatile LONGLONG*>(dest),
                                                 LONGLONG(newValue),
