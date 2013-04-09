@@ -71,7 +71,11 @@ clientSourceBasic = [
     'mongo/util/fail_point.cpp',
     'mongo/util/fail_point_registry.cpp',
     'mongo/util/fail_point_service.cpp',
+<<<<<<< HEAD
     'mongo/util/file.cpp',
+=======
+    'mongo/util/hex.cpp',
+>>>>>>> 135f0fb... SERVER-7324: added templated toHexTemp function to hex.h/hex.cpp
     'mongo/util/histogram.cpp',
     'mongo/util/intrusive_counter.cpp',
     'mongo/util/log.cpp',
@@ -119,6 +123,7 @@ exampleSourceMap = [
         ('secondExample', 'mongo/client/examples/second.cpp'),
         ('tutorial', 'mongo/client/examples/tutorial.cpp'),
         ('whereExample', 'mongo/client/examples/whereExample.cpp'),
+        ('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp'),
         ]
 
 clientHeaderDirectories = [
@@ -290,9 +295,6 @@ if buildShared:
 
     sharedClientProgramInstalls = sharedClientEnv.Install("#/sharedclient", sharedClientPrograms)
     clientTests.append(sharedClientProgramInstalls)
-
-clientTests.append(
-    clientEnv.Install('#/', clientEnv.Program('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp')))
 
 clientEnv.Alias('clientTests', clientTests, [])
 
