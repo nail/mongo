@@ -619,7 +619,6 @@ static void edit( const string& whatToEdit ) {
 }
 
 int _main( int argc, char* argv[], char **envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     mongo::isShell = true;
     setupSignals();
 
@@ -805,6 +804,7 @@ int _main( int argc, char* argv[], char **envp ) {
     if ( ! mongo::cmdLine.quiet )
         cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
 
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     mongo::StartupTest::runTests();
 
     logger::globalLogManager()->getNamedDomain("javascriptOutput")->attachAppender(
