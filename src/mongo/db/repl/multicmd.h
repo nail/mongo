@@ -30,8 +30,8 @@
 
 #pragma once
 
-#include "../../util/background.h"
-#include "connections.h"
+#include "mongo/db/repl/connections.h"
+#include "mongo/util/background.h"
 
 namespace mongo {
 

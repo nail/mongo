@@ -44,6 +44,18 @@
 #include "server.h"
 #include "lockstat.h"
 #include "mongo/db/commands/server_status.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/d_globals.h"
+#include "mongo/db/dur.h"
+#include "mongo/db/lockstat.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/server.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/concurrency/mapsf.h"
+#include "mongo/util/concurrency/qlock.h"
+#include "mongo/util/concurrency/rwlock.h"
+#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/stacktrace.h"
 
 // oplog locking
 // no top level read locks

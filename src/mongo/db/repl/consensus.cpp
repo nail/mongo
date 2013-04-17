@@ -27,10 +27,11 @@
 *    it in the license file.
 */
 
-#include "pch.h"
-#include "../commands.h"
-#include "rs.h"
-#include "multicmd.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/commands.h"
+#include "mongo/db/repl/multicmd.h"
+#include "mongo/db/repl/rs.h"
 
 namespace mongo {
 

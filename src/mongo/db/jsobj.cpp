@@ -42,7 +42,6 @@
 #include "mongo/util/stringutils.h"
 #include "mongo/util/time_support.h"
 
-
 // make sure our assumptions are valid
 BOOST_STATIC_ASSERT( sizeof(short) == 2 );
 BOOST_STATIC_ASSERT( sizeof(int) == 4 );

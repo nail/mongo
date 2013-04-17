@@ -30,10 +30,11 @@
 *    it in the license file.
 */
 
-#include "pch.h"
-#include "rs.h"
-#include "connections.h"
-#include "../client.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/connections.h"
+#include "mongo/db/client.h"
 
 namespace mongo {
 

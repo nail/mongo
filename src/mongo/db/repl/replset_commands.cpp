@@ -27,7 +27,7 @@
 *    it in the license file.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
