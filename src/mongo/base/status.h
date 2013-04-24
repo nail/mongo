@@ -100,10 +100,12 @@ namespace mongo {
         // Below interface used for testing code only.
         //
 
-        inline AtomicUInt32::WordType refCount() const;
+        AtomicUInt32::WordType refCount() const {
+            return _error ? _error->refs.load() : 0;
+        }
 
     private:
-        inline Status();
+        Status();
 
         struct ErrorInfo {
             AtomicUInt32 refs;             // reference counter
