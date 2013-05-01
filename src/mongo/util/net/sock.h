@@ -39,13 +39,14 @@
 
 #ifdef MONGO_SSL
 #include <openssl/ssl.h>
-#include "mongo/util/net/ssl_manager.h"
 #endif
 
 #include "mongo/logger/log_severity.h"
 #include "mongo/platform/compiler.h"
 
 namespace mongo {
+
+    class SSLManagerInterface;
 
     const int SOCK_FAMILY_UNKNOWN_ERROR=13078;
 
@@ -216,9 +217,9 @@ namespace mongo {
 
 #ifdef MONGO_SSL
         /** secures inline */
-        void secure( SSLManager * ssl );
+        void secure( SSLManagerInterface* ssl );
 
-        void secureAccepted( SSLManager * ssl );
+        void secureAccepted( SSLManagerInterface* ssl );
 #endif
         
         /**
@@ -261,7 +262,7 @@ namespace mongo {
 
 #ifdef MONGO_SSL
         SSL* _ssl;
-        SSLManager * _sslAccepted;
+        SSLManagerInterface* _sslManager;
 #endif
         logger::LogSeverity _logLevel; // passed to log() when logging errors
 
