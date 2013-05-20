@@ -650,6 +650,7 @@ namespace JsobjTests {
                 ASSERT( o.getFieldDotted( "a." ).eoo() );
                 ASSERT( o.getFieldDotted( ".a" ).eoo() );
                 ASSERT( o.getFieldDotted( "b.a." ).eoo() );
+                keyTest(o);
             }
         };
 
