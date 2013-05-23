@@ -56,6 +56,7 @@ clientSourceBasic = [
     'mongo/pch.cpp',
     'mongo/platform/backtrace.cpp',
     'mongo/platform/posix_fadvise.cpp',
+    'mongo/platform/process_id.cpp',
     'mongo/platform/random.cpp',
     'mongo/util/assert_util.cpp',
     'mongo/util/background.cpp',
@@ -71,11 +72,8 @@ clientSourceBasic = [
     'mongo/util/fail_point.cpp',
     'mongo/util/fail_point_registry.cpp',
     'mongo/util/fail_point_service.cpp',
-<<<<<<< HEAD
     'mongo/util/file.cpp',
-=======
     'mongo/util/hex.cpp',
->>>>>>> 135f0fb... SERVER-7324: added templated toHexTemp function to hex.h/hex.cpp
     'mongo/util/histogram.cpp',
     'mongo/util/intrusive_counter.cpp',
     'mongo/util/log.cpp',
