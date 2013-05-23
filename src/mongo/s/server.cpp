@@ -46,8 +46,11 @@
 #include "cursors.h"
 #include "../util/processinfo.h"
 #include "mongo/db/lasterror.h"
-#include "mongo/plugins/loader.h"
-#include "mongo/s/config_server_checker_service.h"
+#include "mongo/platform/process_id.h"
+#include "mongo/s/balance.h"
+#include "mongo/s/chunk.h"
+#include "mongo/s/client_info.h"
+#include "mongo/s/config.h"
 #include "mongo/s/config_upgrade.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
@@ -254,15 +257,19 @@ namespace mongo {
 
     void printShardingVersionInfo( bool out ) {
         if ( out ) {
-            cout << "TokuMX mongos router v" << fullVersionString() << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
-                    ( sizeof(int*) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
+            cout << "MongoS version " << versionString << " starting: pid=" <<
+                ProcessId::getCurrent() << " port=" << cmdLine.port <<
+                ( sizeof(int*) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() <<
+                " (--help for usage)" << endl;
             DEV cout << "_DEBUG build" << endl;
             cout << "git version: " << gitVersion() << endl;
             cout <<  "build sys info: " << sysInfo() << endl;
         }
         else {
-            log() << "TokuMX mongos router v" << fullVersionString() << " starting: pid=" << getpid() << " port=" << cmdLine.port <<
-                    ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
+            log() << "MongoS version " << versionString << " starting: pid=" <<
+                ProcessId::getCurrent() << " port=" << cmdLine.port <<
+                ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() <<
+                " (--help for usage)" << endl;
             DEV log() << "_DEBUG build" << endl;
             printGitVersion();
             printTokukvVersion();
