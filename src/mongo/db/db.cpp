@@ -110,7 +110,7 @@ namespace mongo {
 
     CmdLine cmdLine;
     static bool scriptingEnabled = true;
-    static bool noHttpInterface = false;
+    static bool httpInterface = false;
     bool shouldRepairDatabases = 0;
     Timer startupSrandTimer;
 
@@ -282,7 +282,7 @@ namespace mongo {
 
         logStartup();
         startReplication();
-        if ( !noHttpInterface )
+        if ( httpInterface )
             boost::thread web( boost::bind(&webServerThread, new RestAdminAccess() /* takes ownership */));
 
 #if(TESTEXHAUST)
@@ -1134,8 +1134,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("nopreallocj")) {
             out() << "nopreallocj deprecated" << endl;
         }
-        if (params.count("nohttpinterface")) {
-            noHttpInterface = true;
+        if (params.count("httpinterface")) {
+            if (params.count("nohttpinterface")) {
+                log() << "can't have both --httpinterface and --nohttpinterface" << endl;
+                ::_exit( EXIT_BADOPTIONS );
+            }
+            httpInterface = true;
         }
         if (params.count("rest")) {
             cmdLine.rest = true;
