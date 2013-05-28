@@ -44,15 +44,63 @@ namespace mongo {
 
     BSONObj invertUpdateMods(const BSONObj &updateobj);
 
-    void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, BSONObj &newObj, 
-                         const BSONObj &updateobj,
-                         const bool fromMigrate,
-                         uint64_t flags);
+    /** Returns true if updates are supposed to be handle by the new update framework */
+    bool isNewUpdateFrameworkEnabled();
+
+    /* returns true if an existing object was updated, false if no existing object was found.
+       multi - update multiple objects - mostly useful with things like $set
+       su - allow access to system namespaces (super user)
+    */
+    UpdateResult updateObjects(const char* ns,
+                               const BSONObj& updateobj,
+                               const BSONObj& pattern,
+                               bool upsert,
+                               bool multi,
+                               bool logop,
+                               OpDebug& debug,
+                               bool fromMigrate = false,
+                               const QueryPlanSelectionPolicy& planPolicy = QueryPlanSelectionPolicy::any());
 
     UpdateResult updateObjects(const char *ns,
                                const BSONObj &updateobj, const BSONObj &pattern,
                                const bool upsert, const bool multi,
                                const bool fromMigrate = false);
 
+    UpdateResult _updateObjects(bool su,
+                                const char* ns,
+                                const BSONObj& updateobj,
+                                const BSONObj& pattern,
+                                bool upsert,
+                                bool multi,
+                                bool logop,
+                                OpDebug& debug,
+                                RemoveSaver* rs = 0,
+                                bool fromMigrate = false,
+                                const QueryPlanSelectionPolicy& planPolicy
+                                    = QueryPlanSelectionPolicy::any(),
+                                bool forReplication = false);
+
+    UpdateResult _updateObjectsNEW(bool su,
+                                   const char* ns,
+                                   const BSONObj& updateobj,
+                                   const BSONObj& pattern,
+                                   bool upsert,
+                                   bool multi,
+                                   bool logop,
+                                   OpDebug& debug,
+                                   RemoveSaver* rs = 0,
+                                   bool fromMigrate = false,
+                                   const QueryPlanSelectionPolicy& planPolicy
+                                       = QueryPlanSelectionPolicy::any(),
+                                   bool forReplication = false);
+
+    /**
+     * takes the from document and returns a new document
+     * after apply all the operators 
+     * e.g. 
+     *   applyUpdateOperators( BSON( "x" << 1 ) , BSON( "$inc" << BSON( "x" << 1 ) ) );
+     *   returns: { x : 2 }
+     */
+    BSONObj applyUpdateOperators( const BSONObj& from, const BSONObj& operators );
+    
 }  // namespace mongo
