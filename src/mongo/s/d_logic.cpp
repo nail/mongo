@@ -65,7 +65,7 @@ namespace mongo {
 
         string errmsg;
         // We don't care about the version here, since we're returning it later in the writeback
-        ConfigVersion received, wanted;
+        ChunkVersion received, wanted;
         if ( shardVersionOk( ns , errmsg, received, wanted ) ) {
             return;
         }

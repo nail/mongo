@@ -694,14 +694,15 @@ namespace mongo {
      * Run a query with a cursor provided by the query optimizer, or FindingStartCursor.
      * @returns true if client cursor was saved, false if the query has completed.
      */
-    bool queryWithQueryOptimizer( int queryOptions, const string& ns,
-                                  const BSONObj &jsobj, CurOp& curop,
-                                  const BSONObj &query, const BSONObj &order,
-                                  const shared_ptr<ParsedQuery> &pq_shared,
-                                  const ConfigVersion &shardingVersionAtStart,
-                                  const bool getCachedExplainPlan,
-                                  const bool inMultiStatementTxn,
-                                  Message &result ) {
+    string queryWithQueryOptimizer( int queryOptions, const string& ns,
+                                    const BSONObj &jsobj, CurOp& curop,
+                                    const BSONObj &query, const BSONObj &order,
+                                    const shared_ptr<ParsedQuery> &pq_shared,
+                                    const BSONObj &oldPlan,
+                                    const ChunkVersion &shardingVersionAtStart,
+                                    scoped_ptr<PageFaultRetryableSection>& parentPageFaultSection,
+                                    scoped_ptr<NoPageFaultsAllowed>& noPageFault,
+                                    Message &result ) {
 
         const ParsedQuery &pq( *pq_shared );
         shared_ptr<Cursor> cursor;
@@ -1053,6 +1054,9 @@ namespace mongo {
         bool hasRetried = false;
         while ( 1 ) {
             try {
+                Client::ReadContext ctx( ns , dbpath ); // read locks
+                const ChunkVersion shardingVersionAtStart = shardingState.getVersion( ns );
+                
                 replVerifyReadsOk(&pq);
 
                 // Fast-path for primary key queries.
