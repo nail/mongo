@@ -498,7 +498,7 @@ namespace mongo {
 
         validateUpdate( ns , updateobj , patternOrig );
 
-        if ( newUpdateFrameworkEnabled ) {
+        if ( isNewUpdateFrameworkEnabled() ) {
 
             UpdateResult ur = _updateObjectsNEW(false, ns, updateobj, patternOrig,
                                                 upsert, multi, logop,
@@ -528,7 +528,7 @@ namespace mongo {
 
         validateUpdate( ns , updateobj , patternOrig );
 
-        if ( newUpdateFrameworkEnabled ) {
+        if ( isNewUpdateFrameworkEnabled() ) {
 
             UpdateResult ur = _updateObjectsNEW(false,
                                                 ns,
@@ -567,7 +567,7 @@ namespace mongo {
     }
 
     BSONObj applyUpdateOperators( const BSONObj& from, const BSONObj& operators ) {
-        if ( newUpdateFrameworkEnabled ) {
+        if ( isNewUpdateFrameworkEnabled() ) {
             UpdateDriver::Options opts;
             opts.multi = false;
             opts.upsert = false;
