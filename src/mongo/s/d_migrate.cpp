@@ -1033,7 +1033,7 @@ namespace mongo {
 
             ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager( ns );
             verify( chunkManager != NULL );
-            BSONObj shardKeyPattern = chunkManager->getKey();
+            BSONObj shardKeyPattern = chunkManager->getKeyPattern();
             if ( shardKeyPattern.isEmpty() ){
                 errmsg = "no shard key found";
                 return false;

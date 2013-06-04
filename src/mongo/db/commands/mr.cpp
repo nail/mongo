@@ -1218,7 +1218,14 @@ namespace mongo {
                                     continue;
                                 }
 
-                                BSONObj o = cursor->current();
+                            // check to see if this is a new object we don't own yet
+                            // because of a chunk migration
+                            if ( chunkManager ) {
+                                KeyPattern kp( chunkManager->getKeyPattern() );
+                                if ( !chunkManager->keyBelongsToMe( kp.extractSingleKey( o ) ) ) {
+                                    continue;
+                                }
+                            }
 
                                 // check to see if this is a new object we don't own yet
                                 // because of a chunk migration

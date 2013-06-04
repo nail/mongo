@@ -172,7 +172,8 @@ namespace mongo {
             Cursor *c = client_cursor->c();
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
-            ShardChunkManagerPtr manager = client_cursor->getChunkManager();
+            ShardChunkManagerPtr manager = cc->getChunkManager();
+            KeyPattern keyPattern( manager ? manager->getKeyPattern() : BSONObj() );
 
             while ( 1 ) {
                 if ( !c->ok() ) {
@@ -209,8 +210,9 @@ namespace mongo {
                 // in some cases (clone collection) there won't be a matcher
                 if ( !c->currentMatches( &details ) ) {
                 }
-                else if ( manager && ! manager->belongsToMe( client_cursor ) ){
-                    LOG(2) << "cursor skipping document in un-owned chunk: " << c->current() << endl;
+                else if ( manager && !manager->keyBelongsToMe( cc->extractKey( keyPattern ) ) ) {
+                    LOG(2) << "cursor skipping document in un-owned chunk: " << c->current()
+                               << endl;
                 }
                 else {
                     if( c->getsetdup(c->currPK()) ) {
@@ -680,7 +682,8 @@ namespace mongo {
         }
         // TODO: should make this covered at some point
         resultDetails->loadedRecord = true;
-        if ( _chunkManager->belongsToMe( _cursor->current() ) ) {
+        KeyPattern kp( _chunkManager->getKeyPattern() );
+        if ( _chunkManager->keyBelongsToMe( kp.extractSingleKey( _cursor->current() ) ) ) {
             return true;
         }
         resultDetails->chunkSkip = true;
@@ -860,25 +863,73 @@ namespace mongo {
                            const ParsedQuery &pq, CurOp &curop, Message &result) {
         BSONObj resObject;
 
-        bool found = false;
-        Collection *cl = getCollection(ns);
-        if (cl == NULL) {
-            return false; // ns doesn't exist, fall through to optimizer for legacy reasons
-        }
-        const BSONObj &pk = cl->getSimplePKFromQuery(query);
-        if (pk.isEmpty()) {
-            return false; // unable to query by PK - resort to using the optimizer
-        }
-        found = queryByPKHack(cl, pk, query, resObject);
-
-        if ( shardingState.needShardChunkManager( ns ) ) {
-            ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
-            if ( m && ! m->belongsToMe( resObject ) ) {
-                // I have something for this _id
-                // but it doesn't belong to me
-                // so return nothing
-                resObject = BSONObj();
-                found = false;
+        Client& currentClient = cc(); // only here since its safe and takes time
+        auto_ptr< QueryResult > qr;
+        
+        {
+            // this extra bracing is not strictly needed
+            // but makes it clear what the rules are in different spots
+ 
+            scoped_ptr<PageFaultRetryableSection> pgfs;
+            if ( ! currentClient.getPageFaultRetryableSection() )
+                pgfs.reset( new PageFaultRetryableSection() );
+            while ( 1 ) {
+                try {
+                    
+                    int n = 0;
+                    bool nsFound = false;
+                    bool indexFound = false;
+                    
+                    BSONObj resObject; // put inside since we don't own the memory
+                    
+                    Client::ReadContext ctx( ns , dbpath ); // read locks
+                    replVerifyReadsOk(&pq);
+                    
+                    bool found = Helpers::findById( currentClient, ns, query, resObject, &nsFound, &indexFound );
+                    if ( nsFound && ! indexFound ) {
+                        // we have to resort to a table scan
+                        return false;
+                    }
+                    
+                    if ( shardingState.needShardChunkManager( ns ) ) {
+                        ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
+                        if ( m ) {
+                            KeyPattern kp( m->getKeyPattern() );
+                            if ( !m->keyBelongsToMe( kp.extractSingleKey( resObject ) ) ) {
+                                // I have something this _id
+                                // but it doesn't belong to me
+                                // so return nothing
+                                resObject = BSONObj();
+                                found = false;
+                            }
+                        }
+                    }
+                    
+                    BufBuilder bb(sizeof(QueryResult)+resObject.objsize()+32);
+                    bb.skip(sizeof(QueryResult));
+                    
+                    curop.debug().idhack = true;
+                    if ( found ) {
+                        n = 1;
+                        fillQueryResultFromObj( bb , pq.getFields() , resObject );
+                    }
+                    
+                    qr.reset( (QueryResult *) bb.buf() );
+                    bb.decouple();
+                    qr->setResultFlagsToOk();
+                    qr->len = bb.len();
+                    
+                    curop.debug().responseLength = bb.len();
+                    qr->setOperation(opReply);
+                    qr->cursorId = 0;
+                    qr->startingFrom = 0;
+                    qr->nReturned = n;
+                    
+                    break;
+                }
+                catch ( PageFaultException& e ) {
+                    e.touch();
+                }
             }
         }
 

@@ -144,7 +144,7 @@ namespace mongo {
 
         if (!collDoc.getKeyPattern().isEmpty()) {
 
-            manager->_key = collDoc.getKeyPattern();
+            manager->_keyPattern = collDoc.getKeyPattern();
 
             if(!initChunks(collDoc, ns, shard, oldManager, manager, errMsg)){
                 return false;
@@ -157,7 +157,7 @@ namespace mongo {
                           << ns << " is unsharded on this shard" << endl;
             }
 
-            manager->_key = BSONObj();
+            manager->_keyPattern = BSONObj();
             manager->_maxShardVersion = ChunkVersion(1, 0, collDoc.getEpoch());
             manager->_maxCollVersion = manager->_maxShardVersion;
         }
