@@ -128,4 +128,70 @@ namespace {
         ASSERT_EQUALS(fieldRef.numReplaced(), 1U);
     }
 
+    TEST(Prefix, Normal) {
+        FieldRef prefix;
+        FieldRef other;
+
+        // Positive case
+        prefix.parse( "a.b" );
+        other.parse( "a.b.c" );
+        ASSERT( prefix.isPrefixOf( other ) );
+        prefix.parse( "a" );
+        ASSERT( prefix.isPrefixOf( other ) );
+        prefix.parse( "a.0" );
+        other.parse( "a.0.c" );
+        ASSERT( prefix.isPrefixOf( other ) );
+
+        // All these tests are for a prefix of "a.b" in other
+        // Negative cases
+        prefix.parse( "a.b" );
+        other.parse( "a.b" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+        other.parse( "a" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+        other.parse( "b" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+        other.parse( "" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+
+        // Change to no prefix, empty string, and other is "" also
+        prefix.parse( "" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+
+        // Change other to "a", leave prefix at ""
+        other.parse( "a" );
+        ASSERT( !prefix.isPrefixOf( other ) );
+    }
+
+    TEST(Equality, Simple1 ) {
+        FieldRef a;
+        a.parse( "a.b" );
+        ASSERT( a.equalsDottedField( "a.b" ) );
+        ASSERT( !a.equalsDottedField( "a" ) );
+        ASSERT( !a.equalsDottedField( "b" ) );
+        ASSERT( !a.equalsDottedField( "a.b.c" ) );
+    }
+
+    TEST(Equality, Simple2 ) {
+        FieldRef a;
+        a.parse( "a" );
+        ASSERT( !a.equalsDottedField( "a.b" ) );
+        ASSERT( a.equalsDottedField( "a" ) );
+        ASSERT( !a.equalsDottedField( "b" ) );
+        ASSERT( !a.equalsDottedField( "a.b.c" ) );
+    }
+
+    TEST( DottedField, Simple1 ) {
+        FieldRef a;
+        a.parse( "a.b.c.d.e" );
+        ASSERT_EQUALS( "a.b.c.d.e", a.dottedField() );
+        ASSERT_EQUALS( "a.b.c.d.e", a.dottedField(0) );
+        ASSERT_EQUALS( "b.c.d.e", a.dottedField(1) );
+        ASSERT_EQUALS( "c.d.e", a.dottedField(2) );
+        ASSERT_EQUALS( "d.e", a.dottedField(3) );
+        ASSERT_EQUALS( "e", a.dottedField(4) );
+        ASSERT_EQUALS( "", a.dottedField(5) );
+        ASSERT_EQUALS( "", a.dottedField(6) );
+    }
+
 } // namespace mongo

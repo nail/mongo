@@ -88,6 +88,19 @@ namespace mongo {
          */
         size_t numReplaced() const;
 
+        /**
+         * Compares the full dotted path represented by this FieldRef to other
+         */
+        bool equalsDottedField( const StringData& other ) const;
+
+        /**
+         * Compares the full dotted path represented by this FieldRef to other,
+         * and that we are a prefix of them.
+         *
+         * Returns true when 'this' is a prefix of 'other'; equality is not considered a prefix.
+         */
+        bool isPrefixOf( const FieldRef& other ) const;
+
     private:
         // Dotted fields are most often not longer than three parts. We use a mixed structure
         // here that will not require any extra memory allocation when that is the case. And
@@ -113,5 +126,9 @@ namespace mongo {
         size_t appendPart(const StringData& part);
 
     };
+
+    inline bool operator==(const FieldRef& lhs, const FieldRef& rhs) {
+        return lhs.equalsDottedField(rhs.dottedField());
+    }
 
 } // namespace mongo
