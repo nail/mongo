@@ -59,12 +59,7 @@ namespace pal {
                        needleLower.begin(),
                        ::tolower);
 
-        // Use strstr() to find 'lowercased needle' in 'lowercased haystack'
-        // If found, use the location to compute the matching location in the original string
-        // If not found, return NULL
-        const char* haystackLowerStart = haystackLower.c_str();
-        const char* location = strstr(haystackLowerStart, needleLower.c_str());
-        return location ? (haystack + (location - haystackLowerStart)) : NULL;
+        return strstr(haystackLower.c_str(), needleLower.c_str());
     }
 
 #if defined(__sunos__)
