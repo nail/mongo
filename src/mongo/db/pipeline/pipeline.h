@@ -29,6 +29,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "mongo/pch.h"
 
 #include <deque>
@@ -207,12 +209,12 @@ namespace mongo {
         void writeExplainMongos(BSONObjBuilder &result) const;
 
         string collectionName;
-        typedef deque<intrusive_ptr<DocumentSource> > SourceContainer;
+        typedef std::deque<boost::intrusive_ptr<DocumentSource> > SourceContainer;
         SourceContainer sources;
         bool explain;
 
         bool splitMongodPipeline;
-        intrusive_ptr<ExpressionContext> pCtx;
+        boost::intrusive_ptr<ExpressionContext> pCtx;
     };
 
 } // namespace mongo

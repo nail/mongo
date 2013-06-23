@@ -29,6 +29,8 @@
  *    then also delete it in the license file.
  */
 
+#include <iomanip>
+
 #include "stat_util.h"
 #include "mongo/util/mongoutils/str.h"
 

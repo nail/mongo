@@ -29,6 +29,8 @@
 *    it in the license file.
 */
 
+#include <boost/algorithm/string.hpp>
+
 #include "mongo/pch.h"
 
 #include <boost/algorithm/string.hpp>

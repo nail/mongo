@@ -26,6 +26,8 @@
  * it in the license file.
  */
 
+#include <boost/algorithm/string.hpp>
+
 #include "pch.h"
 
 #include "db/pipeline/expression.h"
