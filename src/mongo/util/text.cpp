@@ -15,11 +15,12 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/util/text.h"
 
 #include "mongo/util/text.h"
 #include "mongo/util/mongoutils/str.h"
 #include <boost/smart_ptr/scoped_array.hpp>
+#include <errno.h>
 #include <sstream>
 
 #ifdef _WIN32
