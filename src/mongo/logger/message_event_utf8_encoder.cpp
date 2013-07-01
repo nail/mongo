@@ -24,7 +24,7 @@
 namespace mongo {
 namespace logger {
 
-    static MessageEventDetailsEncoder::DateFormatter _dateFormatter = outputDateAsISOStringLocal;
+    static MessageEventDetailsEncoder::DateFormatter _dateFormatter = dateToISOStringLocal;
 
     void MessageEventDetailsEncoder::setDateFormatter(DateFormatter dateFormatter) {
         _dateFormatter = dateFormatter;
@@ -40,8 +40,7 @@ namespace logger {
 
         static const size_t maxLogLine = 10 * 1024;
 
-        _dateFormatter(os, event.getDate());
-        os << ' ';
+        os << _dateFormatter(event.getDate()) << ' ';
         StringData contextName = event.getContextName();
         if (!contextName.empty()) {
             os << '[' << contextName << "] ";
