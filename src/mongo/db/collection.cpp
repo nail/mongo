@@ -74,7 +74,7 @@ namespace mongo {
         }
         Collection *cl = cm->getCollection(ns);
         if (cl == NULL) {
-            TOKULOG(2) << "Didn't find ns " << ns << ", creating it." << endl;
+            LOG(2) << "Didn't find ns " << ns << ", creating it." << endl;
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
             }
@@ -86,7 +86,7 @@ namespace mongo {
             cl->addDefaultIndexesToCatalog();
 
             // Keep the call to 'str()', it allows us to call it in gdb.
-            TOKULOG(2) << "Created collection " << options.str() << endl;
+            LOG(2) << "Created collection " << options.str() << endl;
         }
         return cl;
     }
@@ -440,7 +440,7 @@ namespace mongo {
         _nIndexes(0),
         _multiKeyIndexBits(0) {
 
-        TOKULOG(1) << "Creating collection " << ns << endl;
+        LOG(1) << "Creating collection " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
         BSONObj info = indexInfo(_ns, pkIndexPattern, true, true, options);
@@ -590,7 +590,7 @@ namespace mongo {
     }
 
     bool CollectionBase::findByPK(const BSONObj &key, BSONObj &result) const {
-        TOKULOG(3) << "CollectionBase::findByPK looking for " << key << endl;
+        LOG(3) << "CollectionBase::findByPK looking for " << key << endl;
 
         storage::Key sKey(key, NULL);
         DBT key_dbt = sKey.dbt();
@@ -632,7 +632,7 @@ namespace mongo {
         return -1;
     }
     bool CollectionBase::getMaxPKForPartitionCap(BSONObj &result) const {
-        TOKULOG(3) << "CollectionBase::getMaxPKForPartitionCap" << endl;
+        LOG(3) << "CollectionBase::getMaxPKForPartitionCap" << endl;
         DB *db = getPKIndexBase().db();
 
         BSONObj obj;
@@ -825,7 +825,7 @@ namespace mongo {
 
     void CollectionBase::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
                                       const bool fromMigrate, uint64_t flags, bool* indexBitChanged) {
-        TOKULOG(4) << "CollectionBase::updateObject pk "
+        LOG(4) << "CollectionBase::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
         *indexBitChanged = false;
 
@@ -1088,7 +1088,7 @@ namespace mongo {
     // hence the _id_ index will have to go.
     bool Collection::dropIndexes(const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
         Lock::assertWriteLocked(_ns);
-        TOKULOG(1) << "dropIndexes " << name << endl;
+        LOG(1) << "dropIndexes " << name << endl;
 
         uassert( 16904, "Cannot drop indexes: a hot index build in progress.",
                         nIndexesBeingBuilt() == nIndexes());
@@ -1476,7 +1476,7 @@ namespace mongo {
     static void removeFromIndexesCatalog(const StringData &ns, const StringData &name) {
         string system_indexes = getSisterNS(cc().database()->name(), "system.indexes");
         BSONObj obj = BSON("ns" << ns << "name" << name);
-        TOKULOG(2) << "removeFromIndexesCatalog removing " << obj << endl;
+        LOG(2) << "removeFromIndexesCatalog removing " << obj << endl;
         const int n = _deleteObjects(system_indexes.c_str(), obj, false, false);
         verify(n == 1);
     }
@@ -2235,7 +2235,7 @@ namespace mongo {
         const long long minUncommitted = _uncommittedMinPKs.size() > 0 ?
                                          _uncommittedMinPKs.begin()->firstElement().Long() :
                                          _nextPK.load();
-        TOKULOG(2) << "minUnsafeKey: minUncommitted " << minUncommitted << endl;
+        LOG(2) << "minUnsafeKey: minUncommitted " << minUncommitted << endl;
         BSONObjBuilder b;
         b.append("", minUncommitted);
         return b.obj();
@@ -2790,7 +2790,7 @@ namespace mongo {
         // now we need to query _metaCollection to get partition information
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
             BSONObj curr = c->current();
-            TOKULOG(1) << "found" << curr.str() << " in meta collection" << endl;
+            LOG(1) << "found" << curr.str() << " in meta collection" << endl;
             // make the collection
             uint64_t currID = curr["_id"].numberLong();
             BSONObj currCollSerialized = makePartitionedSerialized(

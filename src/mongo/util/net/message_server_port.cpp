@@ -30,6 +30,11 @@
 #include "../../db/lasterror.h"
 #include "../../db/stats/counters.h"
 #include "mongo/util/concurrency/ticketholder.h"
+#include "mongo/util/concurrency/thread_name.h"
+#include "mongo/util/net/listen.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/net/message_server.h"
 #include "mongo/util/net/ssl_manager.h"
 
 #ifdef __linux__  // TODO: consider making this ifndef _WIN32
@@ -178,7 +183,7 @@ namespace mongo {
             }
 
             verify( inPort );
-            inPort->psock->setLogLevel(1);
+            inPort->psock->setLogLevel(logger::LogSeverity::Debug(1));
             scoped_ptr<MessagingPort> p( inPort );
 
             string otherSide;

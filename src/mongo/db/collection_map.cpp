@@ -48,7 +48,7 @@ namespace mongo {
             }
         }
         if (_metadb != NULL) {
-            TOKULOG(1) << "Closing CollectionMap " << _database << endl;
+            LOG(1) << "Closing CollectionMap " << _database << endl;
             const int r = _metadb->close();
             if (r != 0) {
                 msgasserted(16920, mongoutils::str::stream() << "failed to close metadb for CollectionMap " << _database);

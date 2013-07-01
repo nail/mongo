@@ -17,9 +17,13 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "../util/admin_access.h"
+#pragma once
+
+#include "./util/admin_access.h"
 
 namespace mongo {
+
+    class SockAddr;
 
     class Prioritizable {
     public:

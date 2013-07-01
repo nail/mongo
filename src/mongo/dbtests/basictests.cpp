@@ -203,12 +203,12 @@ namespace BasicTests {
                 if( sec == 1 ) 
                     matches++;
                 else
-                    log() << "temp millis: " << t.millis() << endl;
+                    mongo::unittest::log() << "temp millis: " << t.millis() << endl;
                 ASSERT( sec >= 0 && sec <= 2 );
                 t.reset();
             }
             if ( matches < 2 )
-                log() << "matches:" << matches << endl;
+                mongo::unittest::log() << "matches:" << matches << endl;
             ASSERT( matches >= 2 );
 
             sleepmicros( 1527123 );
@@ -283,7 +283,7 @@ namespace BasicTests {
 
                 int elapsedMillis = t.millis();
 
-                log() << "Slept for " << elapsedMillis << endl;
+                mongo::unittest::log() << "Slept for " << elapsedMillis << endl;
 
                 ASSERT( almostGTE( elapsedMillis, lastSleepTimeMillis, epsMillis ) );
                 lastSleepTimeMillis = elapsedMillis;
@@ -583,49 +583,19 @@ namespace BasicTests {
         }
     };
 
-    /** Simple tests for log tees. */
-    class LogTee {
-    public:
-        ~LogTee() {
-            // Clean global tees on test failure.
-            Logstream::get().removeGlobalTee( &_tee );            
+    struct CompressionTest1 { 
+        void run() { 
+            const char * c = "this is a test";
+            std::string s;
+            size_t len = compress(c, strlen(c)+1, &s);
+            verify( len > 0 );
+            
+            std::string out;
+            bool ok = uncompress(s.c_str(), s.size(), &out);
+            verify(ok);
+            verify( strcmp(out.c_str(), c) == 0 );
         }
-        void run() {
-            // Attempting to remove a tee before any tees are added is safe.
-            Logstream::get().removeGlobalTee( &_tee );
-
-            // A log is not written to a non global tee.
-            log() << "LogTee test" << endl;
-            assertNumLogs( 0 );
-
-            // A log is written to a global tee.
-            Logstream::get().addGlobalTee( &_tee );
-            log() << "LogTee test" << endl;
-            assertNumLogs( 1 );
-
-            // A log is not written to a tee removed from the global tee list.
-            Logstream::get().removeGlobalTee( &_tee );
-            log() << "LogTee test" << endl;
-            assertNumLogs( 1 );            
-        }
-    private:
-        void assertNumLogs( int expected ) const {
-            ASSERT_EQUALS( expected, _tee.numLogs() );
-        }
-        class Tee : public mongo::Tee {
-        public:
-            Tee() :
-                _numLogs() {
-            }
-            virtual void write( LogLevel level, const string &str ) {
-                ++_numLogs;
-            }
-            int numLogs() const { return _numLogs; }
-        private:
-            int _numLogs;
-        };
-        Tee _tee;
-    };
+    } ctest1;
 
     class All : public Suite {
     public:
@@ -662,7 +632,8 @@ namespace BasicTests {
             add< RelativePathTest >();
             add< CmdLineParseConfigTest >();
 
-            add< LogTee >();
+            add< CompressionTest1 >();
+
         }
     } myall;
 

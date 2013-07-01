@@ -263,7 +263,7 @@ namespace mongo {
             setTxnCompleteHooks(hooks);
             _updateCallback = updateCallback;
 
-            tokulog() << "startup" << endl;
+            LOG(0) << "startup" << endl;
 
             db_env_set_direct_io(cmdLine.directio);
 
@@ -295,7 +295,7 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
+            LOG(1) << "cachesize set to " << gigabytes << " GB + " << bytes << " bytes."<< endl;
 
             // Use 10% the size of the cachetable for lock tree memory
             // if no value was specified on the command line.
@@ -306,17 +306,17 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
+            LOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
             const uint64_t lock_timeout = cmdLine.lockTimeout;
             r = env->set_lock_timeout(env, lock_timeout, get_lock_timeout_callback);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
+            LOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
             env->set_loader_memory_size(env, get_loader_memory_size_callback);
-            TOKULOG(1) << "loader memory size set to " << get_loader_memory_size_callback() << " bytes." << endl;
+            LOG(1) << "loader memory size set to " << get_loader_memory_size_callback() << " bytes." << endl;
 
             r = env->set_default_bt_compare(env, dbt_key_compare);
             if (r != 0) {
@@ -346,7 +346,7 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "filesystem redzone set to " << redzone_threshold << " percent." << endl;
+            LOG(1) << "filesystem redzone set to " << redzone_threshold << " percent." << endl;
 
             const char *logDir = cmdLine.logDir.c_str();
             if (!mongoutils::str::equals(logDir, "")) {
@@ -354,7 +354,7 @@ namespace mongo {
                 if (r != 0) {
                     handle_ydb_error_fatal(r);
                 }
-                TOKULOG(1) << "transaction log directory set to " << logDir << endl;
+                LOG(1) << "transaction log directory set to " << logDir << endl;
             }
 
             const char *tmpDir = cmdLine.tmpDir.c_str();
@@ -363,7 +363,7 @@ namespace mongo {
                 if (r != 0) {
                     handle_ydb_error_fatal(r);
                 }
-                TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
+                LOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
             }
 
             if (numCachetableBucketMutexes > 0) {
@@ -384,25 +384,25 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
+            LOG(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
 
             const int cleaner_period = cmdLine.cleanerPeriod;
             r = env->cleaner_set_period(env, cleaner_period);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
+            LOG(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
 
             const int cleaner_iterations = cmdLine.cleanerIterations;
             r = env->cleaner_set_iterations(env, cleaner_iterations);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
+            LOG(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
         }
 
         void shutdown(void) {
-            tokulog() << "shutdown" << endl;
+            LOG(0) << "shutdown" << endl;
             // It's possible for startup to fail before storage::startup() is called
             if (env != NULL) {
                 int r = env->close(env, 0);
@@ -1200,7 +1200,7 @@ namespace mongo {
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
                 case TOKUDB_HUGE_PAGES_ENABLED:
-                    LOG(LL_ERROR) << endl << endl
+                    LOG(0) << endl << endl
                                   << "************************************************************" << endl
                                   << "                                                            " << endl
                                   << "                        @@@@@@@@@@@                         " << endl

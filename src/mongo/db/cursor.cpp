@@ -138,7 +138,7 @@ namespace mongo {
         _bufferedRowCount(0),
         _exhausted(false),
         _endSKeyPrefix(_endKey, NULL) {
-        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        LOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         checkAssumptionsAndInit();
     }
 
@@ -150,7 +150,7 @@ namespace mongo {
         _bufferedRowCount(0),
         _exhausted(false),
         _endSKeyPrefix(_endKey, NULL) {
-        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        LOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         dassert(_startKey == bounds->startKey());
         dassert(_endKey == bounds->endKey());
         dassert(_endKeyInclusive == bounds->endKeyInclusive());
@@ -175,7 +175,7 @@ namespace mongo {
             // This is useful because we only want to compare the secondary key prefix.
             const storage::Key sKey(reinterpret_cast<char *>(key->data), false);
             const int c = sKey.woCompare(info->endSKeyPrefix, info->ordering);
-            TOKULOG(5) << "count getf got " << sKey.key() << ", c = " << c << endl;
+            LOG(5) << "count getf got " << sKey.key() << ", c = " << c << endl;
             if (c > 0 || (c == 0 && !info->endKeyInclusive)) {
                 // out of bounds, count is finished.
                 dassert(!info->exhausted);
@@ -264,7 +264,7 @@ namespace mongo {
     }
 
     void PartitionedCursor::initializeSubCursor() {
-        TOKULOG(3) << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
+        LOG(3) << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
         uint64_t currPartition = _subPartitionIDGenerator->getCurrentPartitionIndex();
         _currentCursor = _subCursorGenerator->makeSubCursor(currPartition);
         while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
@@ -542,12 +542,12 @@ namespace mongo {
             if ( frsp->matchPossibleForSingleKeyFRS( key.key() ) ) {
                 BoundList ranges = key.keyBounds( frsp->getSingleKeyFRS() );
                 for ( BoundList::const_iterator it=ranges.begin(); it != ranges.end(); ++it ){
-                    TOKULOG(3) << "Bounds for partitions: first: " << it->first << " second " << it->second << endl;
+                    LOG(3) << "Bounds for partitions: first: " << it->first << " second " << it->second << endl;
                     uint64_t first = pc->partitionWithRow(it->first);
                     uint64_t second = pc->partitionWithRow(it->second);
                     uint64_t min = first < second ? first : second;
                     uint64_t max = first < second ? second : first;
-                    TOKULOG(3) << "Setting partitions " << min << " through " << max << " to be read" <<endl;
+                    LOG(3) << "Setting partitions " << min << " through " << max << " to be read" <<endl;
                     for (uint64_t i = min; i <= max; i++) {
                         _partitionsToRead[i] = true;
                         if (i < minPartitionToRead) {

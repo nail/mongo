@@ -61,10 +61,10 @@ namespace mongo {
             try {
                 _idx->close();
             } catch (const DBException &e) {
-                TOKULOG(0) << "Caught DBException exception while destroying IndexerBase: "
+                LOG(0) << "Caught DBException exception while destroying IndexerBase: "
                            << e.getCode() << ", " << e.what() << endl;
             } catch (...) {
-                TOKULOG(0) << "Caught generic exception while destroying IndexerBase." << endl;
+                LOG(0) << "Caught generic exception while destroying IndexerBase." << endl;
             }
         } else {
             // the indexer is destructing before it got a chance to actually

@@ -169,7 +169,7 @@ namespace mongo {
 
         const string &PluginHandle::name() const {
             if (!_interface) {
-                DEV LOG(0) << "in PluginHandle::name, plugin is not initialized" << endl;
+                DEV { LOG(0) << "in PluginHandle::name, plugin is not initialized" << endl; }
                 static const string empty("");
                 return empty;
             }

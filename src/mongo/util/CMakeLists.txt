@@ -11,6 +11,7 @@ add_library(foundation STATIC
   file
   hex
   log
+  ../logger
   platform_init
   signal_handlers
   text

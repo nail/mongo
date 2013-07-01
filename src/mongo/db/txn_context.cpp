@@ -371,7 +371,7 @@ namespace mongo {
     }
 
     void CollectionMapRollback::transfer(CollectionMapRollback &parent) {
-        TOKULOG(1) << "CollectionMapRollback::transfer processing "
+        LOG(1) << "CollectionMapRollback::transfer processing "
                    << _namespaces.size() + _dbs.size() << " roll items." << endl;
 
         // Promote rollback entries to parent.

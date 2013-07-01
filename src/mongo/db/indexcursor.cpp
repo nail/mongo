@@ -173,7 +173,7 @@ namespace mongo {
         _getf_iteration(0)
     {
         verify( _cl != NULL );
-        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        LOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         _cursor = idx.getCursor(cursor_flags());
         DBC* cursor = _cursor->dbc();
         cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
@@ -206,7 +206,7 @@ namespace mongo {
         _startKey = _bounds->startKey();
         _endKey = _bounds->endKey();
         _endKeyInclusive = _bounds->endKeyInclusive();
-        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        LOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         _cursor = idx.getCursor(cursor_flags());
         DBC* cursor = _cursor->dbc();
         cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
@@ -503,7 +503,7 @@ namespace mongo {
     }
 
     void IndexCursor::setPosition(const BSONObj &key, const BSONObj &pk) {
-        TOKULOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
+        LOG(3) << toString() << ": setPosition(): getf " << key << ", pk " << pk << ", direction " << _direction << endl;
 
         // Empty row buffer, reset fetch iteration, go get more rows.
         _buffer.empty();
@@ -539,7 +539,7 @@ namespace mongo {
             getCurrentFromBuffer();
         }
 
-        TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
+        LOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
     }
 
     // Check the current key with respect to our key bounds, whether
@@ -575,7 +575,7 @@ namespace mongo {
     // Skip the key comprised of the first k fields of currentKey and the
     // rest set to max/min key for direction > 0 or < 0 respectively.
     void IndexCursor::skipPrefix(const BSONObj &key, const int k) {
-        TOKULOG(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
+        LOG(3) << "skipPrefix skipping first " << k << " elements in key " << key << endl;
         BSONObjBuilder b(key.objsize());
         BSONObjIterator it = key.begin();
         const int nFields = key.nFields();
@@ -702,7 +702,7 @@ again:      while ( !allInclusive && ok() ) {
             const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
             if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
                 _ok = false;
-                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
+                LOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
             }
         }
     }
@@ -753,9 +753,9 @@ again:      while ( !allInclusive && ok() ) {
         // Get a row from the bulk fetch buffer
         if ( ok() ) {
             getCurrentFromBuffer();
-            TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+            LOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
         } else {
-            TOKULOG(3) << "_advance exhausted" << endl;
+            LOG(3) << "_advance exhausted" << endl;
         }
     }
 
@@ -801,7 +801,7 @@ again:      while ( !allInclusive && ok() ) {
                 // - a snapshot transaction whose context deleted the current pk
                 // - a read uncommitted cursor with stale data
                 // In either case, we may advance and try again exactly once.
-                TOKULOG(4) << "current() did not find associated object for pk " << _currPK << endl;
+                LOG(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
                     found = _cl->findByPK( _currPK, _currObj );

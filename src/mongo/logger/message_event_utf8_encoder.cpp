@@ -30,7 +30,9 @@ namespace logger {
 
         static const size_t maxLogLine = 10 * 1024;
 
-        os << dateToCtimeString(event.getDate()) << ' ';
+        char dateString[64];
+        curTimeString(dateString);
+        os << dateString << ' ';
         StringData contextName = event.getContextName();
         if (!contextName.empty()) {
             os << '[' << contextName << "] ";

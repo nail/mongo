@@ -52,6 +52,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/concurrency/thread_name.h"
 
 namespace mongo {
   

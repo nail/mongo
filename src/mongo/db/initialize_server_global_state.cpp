@@ -19,15 +19,25 @@
 #include "mongo/db/initialize_server_global_state.h"
 
 #include <boost/filesystem/operations.hpp>
+#include <memory>
 
 #ifndef _WIN32
+#include <syslog.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #endif
 
+#include "mongo/base/init.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/security_key.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/logger/logger.h"
+#include "mongo/logger/message_event.h"
+#include "mongo/logger/message_event_utf8_encoder.h"
+#include "mongo/logger/rotatable_file_appender.h"
+#include "mongo/logger/rotatable_file_manager.h"
+#include "mongo/logger/rotatable_file_writer.h"
+#include "mongo/logger/syslog_appender.h"
 #include "mongo/platform/process_id.h"
 #include "mongo/util/log.h"
 #include "mongo/util/net/listen.h"
@@ -120,14 +130,15 @@ namespace mongo {
                 _exit(51);
             }
 
-            // stdout handled in initLogging
-            //fclose(stdout);
-            //freopen("/dev/null", "w", stdout);
+            // this is run in the final child process (the server)
 
-            fclose(stderr);
-            fclose(stdin);
+            FILE* f = freopen("/dev/null", "w", stdout);
+            if ( f == NULL ) {
+                cout << "Cant reassign stdout while forking server process: " << strerror(errno) << endl;
+                return false;
+            }
 
-            FILE* f = freopen("/dev/null", "w", stderr);
+            f = freopen("/dev/null", "w", stderr);
             if ( f == NULL ) {
                 cout << "Cant reassign stderr while forking server process: " << strerror(errno) << endl;
                 return false;

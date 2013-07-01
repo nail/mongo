@@ -203,7 +203,7 @@ namespace mongo {
             // TODO: (Zardosht), figure out if there are any checks to do here
             // not sure under what scenarios we can be here, so
             // making a printf to catch this so we can investigate
-            tokulog() << "createOplog called with existing collections, investigate why.\n" << endl;
+            LOG(0) << "createOplog called with existing collections, investigate why.\n" << endl;
             return;
         }
 

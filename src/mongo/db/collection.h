@@ -971,7 +971,7 @@ namespace mongo {
                     string idxName = oldIndexSpec["name"].String();
                     string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
                     string newIdxNS = IndexDetails::indexNamespace(to, idxName);
-                    TOKULOG(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
+                    LOG(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
                     storage::db_rename(oldIdxNS, newIdxNS);
                 }
             }

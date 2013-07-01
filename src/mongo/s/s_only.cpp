@@ -20,14 +20,13 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/auth_external_state_s.h"
-#include "mongo/s/shard.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/matcher.h"
+#include "mongo/s/client_info.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
-#include "mongo/s/client_info.h"
-#include "mongo/db/matcher.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/namespacestring.h"
+#include "mongo/s/shard.h"
+#include "mongo/util/concurrency/thread_name.h"
 
 /*
   most a pile of hacks to make linking nicer

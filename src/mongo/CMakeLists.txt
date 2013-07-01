@@ -93,6 +93,7 @@ target_link_libraries(mongocommon LINK_PUBLIC
 add_subdirectory(base)
 add_subdirectory(bson)
 add_subdirectory(db)
+add_subdirectory(logger)
 add_subdirectory(platform)
 add_subdirectory(plugins)
 add_subdirectory(s)
@@ -165,7 +166,6 @@ set(client_sources
   util/password.cpp
   util/processinfo.cpp
   util/processinfo_${system_suffix}.cpp
-  util/ramlog.cpp
   util/signal_handlers.cpp
   util/stringutils.cpp
   util/text.cpp

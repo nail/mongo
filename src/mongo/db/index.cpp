@@ -232,7 +232,7 @@ namespace mongo {
     bool IndexDetailsBase::open(const bool may_create) {
         const string dname = indexNamespace();
 
-        TOKULOG(1) << "Opening IndexDetails " << dname << endl;
+        LOG(1) << "Opening IndexDetails " << dname << endl;
         try {
             _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
                                               _info["background"].trueValue()));
@@ -429,7 +429,7 @@ namespace mongo {
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
-        TOKULOG(3) << "index " << info()["key"].Obj() << ": sent update to "
+        LOG(3) << "index " << info()["key"].Obj() << ": sent update to "
                    << key << ", pk " << (pk ? *pk : BSONObj()) << ", msg " << msg << endl;
     }
 

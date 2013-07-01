@@ -244,7 +244,7 @@ namespace mongo {
                                        const BSONObj &patternOrig,
                                        const bool upsert, const bool multi,
                                        const bool fromMigrate) {
-        TOKULOG(2) << "update: " << ns
+        LOG(2) << "update: " << ns
                    << " update: " << updateobj
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;

@@ -666,8 +666,9 @@ namespace mongo {
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             int was = _diaglog.setLevel( cmdObj.firstElement().numberInt() );
             _diaglog.flush();
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: diagLogging set to " << _diaglog.getLevel() << " from: " << was << endl;
+            if ( !cmdLine.quiet ) {
+                MONGO_TLOG(0) << "CMD: diagLogging set to " << _diaglog.getLevel() << " from: " << was << endl;
+            }
             result.append( "was" , was );
             return true;
         }
@@ -690,8 +691,9 @@ namespace mongo {
         virtual void help( stringstream& help ) const { help << "drop a collection\n{drop : <collectionName>}"; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string nsToDrop = dbname + '.' + cmdObj.firstElement().valuestr();
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: drop " << nsToDrop << endl;
+            if ( !cmdLine.quiet ) {
+                MONGO_TLOG(0) << "CMD: drop " << nsToDrop << endl;
+            }
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
             Collection *cl = getCollection(nsToDrop);
             if (cl == 0) {
@@ -807,8 +809,9 @@ namespace mongo {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
             Collection *cl = getCollection(toDeleteNs);
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: dropIndexes " << toDeleteNs << endl;
+            if ( !cmdLine.quiet ) {
+                MONGO_TLOG(0) << "CMD: dropIndexes " << toDeleteNs << endl;
+            }
             if ( cl ) {
                 BSONElement f = jsobj.getField("index");
                 if ( f.type() == String ) {
@@ -914,7 +917,7 @@ namespace mongo {
                 Client::Context ctx(ns);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 Collection *cl = getCollection(ns);
-                tlog() << "CMD: reIndex " << ns << endl;
+                MONGO_TLOG(0) << "CMD: reIndex " << ns << endl;
 
                 if (cl == NULL) {
                     errmsg = "ns not found";
@@ -2169,8 +2172,7 @@ namespace mongo {
     bool _runCommands(const char *ns, const BSONObj &cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         string dbname = nsToDatabase( ns );
 
-        if( logLevel >= 1 )
-            log() << "run command " << ns << ' ' << cmdobj << endl;
+        LOG(1) << "run command " << ns << ' ' << cmdobj << endl;
 
         const char *p = strchr(ns, '.');
         if ( !p ) return false;
