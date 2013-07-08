@@ -40,6 +40,7 @@ files.forEach(function(x) {
     // fsync, fsync2: isn't supported through mongos.
     // remove5: getpreverror, I think. don't run.
     // update4: getpreverror don't run.
+    // getmore_error: tests a mongod-specific failpoint
 
     // Around July 20, command passthrough went away, and these
     // commands weren't implemented:
@@ -90,52 +91,31 @@ files.forEach(function(x) {
         'profile\\d*' +
         ')\.js$');
 
-	// These aren't supposed to get run under sharding:
-	var notForShardingPattern = new RegExp('[\\/\\\\](' +
-	    '6072_touch|' +
-	    'auth_mst|' +
-	    'lock_diag_size_limit|' +
-	    'cursor_timeout|' +
-	    'dbadmin|' +
-	    'error1|' +
-	    'fsync|' +
-	    'fsync2|' +
-	    'geo.*|' +
-	    'indexh|' +
-	    'remove5|' +
-	    'update4|' +
-	    'loglong|' +
-	    'logpath|' +
-	    'notablescan|' +
-	    'compact.*|' +
-	    'check_shard_index|' +
-	    'bench_test.*|' +
-	    'mr_replaceIntoDB|' +
-	    'mr_auth|' +
-	    'queryoptimizera|' +
-	    'indexStatsCommand|' +
-	    'reversecursor|' +
-            'block_check_supported|' +
-	    'stats|' +
-	    'txn_.*|' +
-	    'loader_.*|' +
-	    'query_write_lock|' +
-	    'bug301|' +
-	    'collection_exists_cmd|' +
-	    'getNamespaces_after_close|' +
-	    'ops_after_close|' +
-	    'collections_exist_cmd|' +
-            'update_fast|' +
-            'update_fasterrors|' +
-            'partition_mst_886|' +
-            'multi_key_mst_872|' +
-            'partition_add|' +
-            'partition_stats|' +
-            'part_convert|' +
-            'part_coll_simple|' +
-            'partition_ops_multithread|' +
-            'pk_unique_check_param|' +
-            'indexer_bg_unit' +
+    // These aren't supposed to get run under sharding:
+    var notForShardingPattern = new RegExp('[\\/\\\\](' +
+        'dbadmin|' +
+        'error1|' +
+        'fsync|' +
+        'fsync2|' +
+        'geo.*|' +
+        'indexh|' +
+        'remove5|' +
+        'update4|' +
+        'loglong|' +
+        'logpath|' +
+        'notablescan|' +
+        'compact.*|' +
+        'check_shard_index|' +
+        'bench_test.*|' +
+        'mr_replaceIntoDB|' +
+        'mr_auth|' +
+        'queryoptimizera|' +
+        'indexStatsCommand|' +
+        'reversecursor|' +
+        'block_check_supported|' +
+        'stages.*|' +
+        'getmore_error|' +
+        'stats' + // tests db.stats().dataFileVersion, which doesn't appear in sharded db.stats()
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
