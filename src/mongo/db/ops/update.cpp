@@ -44,7 +44,7 @@ namespace mongo {
     MONGO_EXPORT_SERVER_PARAMETER( newUpdateFrameworkEnabled, bool, false );
 
     bool isNewUpdateFrameworkEnabled() {
-        return false;
+        return newUpdateFrameworkEnabled;
     }
 
     void checkNoMods( BSONObj o ) {
