@@ -552,7 +552,10 @@ namespace mongo {
 
             BSONObj newObj;
             BSONObj logObj;
-            status = driver.update( oldObj, matchDetails.elemMatchKey(), &newObj, &logObj );
+            StringData matchedField = matchDetails.hasElemMatchKey() ?
+                                                    matchDetails.elemMatchKey():
+                                                    StringData();
+            status = driver.update( oldObj, matchedField, &newObj, &logObj );
             if ( !status.isOK() ) {
                 uasserted( 16837, status.reason() );
             }
