@@ -132,7 +132,15 @@ namespace mongo {
         int start = 0;
         int n = 0;
 
-        if ( unlikely(!client_cursor) ) {
+        scoped_ptr<Client::ReadContext> ctx(new Client::ReadContext(ns));
+        // call this readlocked so state can't change
+        replVerifyReadsOk();
+
+        ClientCursor::Pin p(cursorid);
+        ClientCursor *cc = p.c();
+
+
+        if ( unlikely(!cc) ) {
             LOGSOME << "getMore: cursorid not found " << ns << " " << cursorid << endl;
             cursorid = 0;
             resultFlags = ResultFlag_CursorNotFound;
@@ -176,8 +184,18 @@ namespace mongo {
             
             curop.debug().query = client_cursor->query();
 
-            start = client_cursor->pos();
-            Cursor *c = client_cursor->c();
+            start = cc->pos();
+            Cursor *c = cc->c();
+
+            if (!c->requiresLock()) {
+                // make sure it won't be destroyed under us
+                fassert(16952, !c->shouldDestroyOnNSDeletion());
+                fassert(16953, !c->supportYields());
+                ctx.reset(); // unlocks
+            }
+
+            c->recoverFromYield();
+            DiskLoc last;
 
             // This manager may be stale, but it's the state of chunking when the cursor was created.
             ShardChunkManagerPtr manager = cc->getChunkManager();

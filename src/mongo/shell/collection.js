@@ -664,7 +664,7 @@ DBCollection.prototype.aggregate = function( ops ) {
         throw "aggregate failed: " + tojson(res);
     }
 
-    if (false && TestData) {  // TODO: when we implement aggregate cursors in TokuMX, take off the false
+    if (TestData) {
         // If we are running in a test, make sure cursor output is the same.
         // This block should go away with work on SERVER-10165.
 

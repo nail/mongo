@@ -187,7 +187,10 @@ namespace mongo {
             massert( 16159, "manual keyFieldsOnly config not allowed", false );
         }
         
-        virtual void explainDetails( BSONObjBuilder& b ) const { return; }
+        virtual void explainDetails( BSONObjBuilder& b ) { return; }
+
+        /// Should getmore handle locking for you
+        virtual bool requiresLock() { return true; }
 
         /// Should this cursor be destroyed when it's namespace is deleted
         virtual bool shouldDestroyOnNSDeletion() { return true; }
