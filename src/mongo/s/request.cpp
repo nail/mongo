@@ -119,8 +119,14 @@ namespace mongo {
             cursorCache.gotKillCursors( _m );
         }
         else if ( op == dbQuery ) {
-            iscmd = isCommand();
+            iscmd = NamespaceString( getns() ).isCommand();
+
             if (iscmd) {
+                int n = _d.getQueryNToReturn();
+                uassert( 16978, str::stream() << "bad numberToReturn (" << n
+                                              << ") for $cmd type ns - can only be 1 or -1",
+                         n == 1 || n == -1 );
+
                 SINGLE->queryOp(*this);
             }
             else {
@@ -142,11 +148,6 @@ namespace mongo {
                << endl;
 
         globalOpCounters.gotOp( op , iscmd );
-    }
-
-    bool Request::isCommand() const {
-        int x = _d.getQueryNToReturn();
-        return ( x == 1 || x == -1 ) && strstr( getns() , ".$cmd" );
     }
 
     void Request::gotInsert() {
