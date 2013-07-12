@@ -660,10 +660,6 @@ namespace mongo {
 
         Client::initThread("initandlisten");
 
-        logger::globalLogDomain()->attachAppender(
-                logger::MessageLogDomain::AppenderAutoPtr(
-                        new RamLogAppender(new RamLog("global"))));
-
         bool is32bit = sizeof(int*) == 4;
 
         {

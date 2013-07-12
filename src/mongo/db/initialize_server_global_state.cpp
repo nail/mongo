@@ -46,6 +46,7 @@
 #include "mongo/logger/logger.h"
 #include "mongo/logger/message_event.h"
 #include "mongo/logger/message_event_utf8_encoder.h"
+#include "mongo/logger/ramlog.h"
 #include "mongo/logger/rotatable_file_appender.h"
 #include "mongo/logger/rotatable_file_manager.h"
 #include "mongo/logger/rotatable_file_writer.h"

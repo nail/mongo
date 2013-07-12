@@ -334,7 +334,7 @@ namespace mongo {
 
     vector<WebStatusPlugin*> * WebStatusPlugin::_plugins = 0;
 
-    // -- basic statuc plugins --
+    // -- basic status plugins --
 
     class LogPlugin : public WebStatusPlugin {
     public:
@@ -343,12 +343,9 @@ namespace mongo {
 
         virtual void init() {
             _log = RamLog::get( "global" );
-            if ( ! _log ) {
-                _log = new RamLog("global");
-                logger::globalLogDomain()->attachAppender(logger::MessageLogDomain::AppenderAutoPtr(
-                                                                  new RamLogAppender(_log)));
-            }
         }
+
+        virtual void init() {}
 
         virtual void run( stringstream& ss ) {
             _log->toHTML( ss );
