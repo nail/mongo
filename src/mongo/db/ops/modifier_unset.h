@@ -29,48 +29,43 @@ namespace mongo {
 
     class LogBuilder;
 
-    class ModifierSet : public ModifierInterface {
-        MONGO_DISALLOW_COPYING(ModifierSet);
+    class ModifierUnset : public ModifierInterface {
+        MONGO_DISALLOW_COPYING(ModifierUnset);
 
     public:
 
-        enum ModifierSetMode { SET_NORMAL, SET_ON_INSERT };
-        explicit ModifierSet(ModifierSetMode mode = SET_NORMAL);
+        ModifierUnset();
 
         //
         // Modifier interface implementation
         //
 
-        virtual ~ModifierSet();
+        virtual ~ModifierUnset();
 
         /**
          * A 'modExpr' is a BSONElement {<fieldname>: <value>} coming from a $set mod such as
-         * {$set: {<fieldname: <value>}}. init() extracts the field name and the value to be
+         * {$unset: {<fieldname: <value>}}. init() extracts the field name and the value to be
          * assigned to it from 'modExpr'. It returns OK if successful or a status describing
          * the error.
          */
         virtual Status init(const BSONElement& modExpr);
 
         /**
-         * Looks up the field name in the sub-tree rooted at 'root', and binds, if necessary,
-         * the '$' field part using the 'matchedfield' number. prepare() returns OK and
-         * fills in 'execInfo' with information of whether this mod is a no-op on 'root' and
-         * whether it is an in-place candidate. Otherwise, returns a status describing the
-         * error.
+         * Locates the field to be removed under the 'root' element, if it exist, and fills in
+         * 'execInfo' accordingly. Return OK if successful or a status describing the error.
          */
         virtual Status prepare(mutablebson::Element root,
                                const StringData& matchedField,
                                ExecInfo* execInfo);
 
         /**
-         * Applies the prepared mod over the element 'root' specified in the prepare()
-         * call. Returns OK if successful or a status describing the error.
+         * Removes the found element from the document. If such element was inside an array,
+         * removal means setting that array position to 'null'.
          */
         virtual Status apply() const;
 
         /**
-         * Adds a log entry to logRoot corresponding to the operation applied here. Returns OK
-         * if successful or a status describing the error.
+         * Adds the exact $unset mod to the log.
          */
         virtual Status log(LogBuilder* logBuilder) const;
 
@@ -81,9 +76,6 @@ namespace mongo {
 
         // 0 or index for $-positional in _fieldRef.
         size_t _posDollar;
-
-        // If on 'on insert' mode, We'd like to apply this mod only if we're in a upsert.
-        const ModifierSetMode _setMode;
 
         // Element of the $set expression.
         BSONElement _val;

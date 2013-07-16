@@ -17,42 +17,45 @@
 #pragma once
 
 #include <boost/scoped_ptr.hpp>
+#include <string>
 
 #include "mongo/base/disallow_copying.h"
-#include "mongo/bson/mutable/document.h"
+#include "mongo/bson/mutable/element.h"
 #include "mongo/db/field_ref.h"
 #include "mongo/db/ops/modifier_interface.h"
+#include "mongo/util/safe_num.h"
 
 namespace mongo {
 
     class LogBuilder;
 
-    class ModifierAddToSet : public ModifierInterface {
-        MONGO_DISALLOW_COPYING(ModifierAddToSet);
+    class ModifierBit : public ModifierInterface {
+        MONGO_DISALLOW_COPYING(ModifierBit);
 
     public:
 
-        ModifierAddToSet();
-        virtual ~ModifierAddToSet();
+        ModifierBit();
+        virtual ~ModifierBit();
 
-        /** Goes over the array item(s) that are going to be set- unioned and converts them
-         *  internally to a mutable bson. Both single and $each forms are supported. Returns OK
-         *  if the item(s) are valid otherwise returns a status describing the error.
+        /**
+         * A 'modExpr' is a BSONElement {<fieldname>: <value>} coming from a $bit mod such as
+         * {$bit: {<field: { [and|or] : <value>}}. init() extracts the field name, the
+         * operation subtype, and the value to be assigned to it from 'modExpr'. It returns OK
+         * if successful or a status describing the error.
          */
         virtual Status init(const BSONElement& modExpr);
 
-        /** Decides which portion of the array items that are going to be set-unioned to root's
-         *  document and fills in 'execInfo' accordingly. Returns OK if the document has a
-         *  valid array to set-union to, othwise returns a status describing the error.
+        /** Validates the potential application of the init'ed mod to the given Element and
+         *  configures the internal state of the mod as necessary.
          */
         virtual Status prepare(mutablebson::Element root,
                                const StringData& matchedField,
                                ExecInfo* execInfo);
 
-        /** Updates the Element used in prepare with the effects of the $addToSet operation. */
+        /** Updates the Element used in prepare with the effects of the $bit operation */
         virtual Status apply() const;
 
-        /** Converts the effects of this $addToSet into one or more equivalent $set operations. */
+        /** Converts the effects of this $bit into an equivalent $set */
         virtual Status log(LogBuilder* logBuilder) const;
 
     private:
@@ -62,9 +65,11 @@ namespace mongo {
         // 0 or index for $-positional in _fieldRef.
         size_t _posDollar;
 
-        // Array of values to be set-union'ed onto target.
-        mutablebson::Document _valDoc;
-        mutablebson::Element _val;
+        // Value to be $bit'ed onto target
+        SafeNum _val;
+
+        // The operator on SafeNum that we will invoke.
+        SafeNum (SafeNum::* _op)(const SafeNum&) const;
 
         struct PreparedState;
         scoped_ptr<PreparedState> _preparedState;
