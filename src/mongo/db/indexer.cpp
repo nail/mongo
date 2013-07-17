@@ -17,6 +17,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/base/string_data.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/client.h"
@@ -38,10 +39,11 @@ namespace mongo {
         if (!cc().creatingSystemUsers() &&
             !cc().upgradingDiskFormatVersion()) {
             std::string sourceNS = info["ns"].String();
-            uassert(16548,
-                    mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
-                    cc().getAuthorizationManager()->checkAuthorization(sourceNS,
-                                                                       ActionType::ensureIndex));
+            const bool ok = cc().getAuthorizationManager()->checkAuthorization(sourceNS,
+                                                                               ActionType::ensureIndex);
+            audit::logInsertAuthzCheck(&cc(), NamespaceString(cl->ns()), info,
+                                       ok ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+            uassert(16548, mongoutils::str::stream() << "not authorized to create index on " << sourceNS, ok);
         }
     }
 

@@ -36,6 +36,7 @@
 
 #include "mongo/bson/util/atomic_int.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/databaseholder.h"
@@ -137,15 +138,19 @@ namespace mongo {
     }
 
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
+        DbMessage d(m);
+        QueryMessage q(d);
         BSONObjBuilder b;
 
-        if (!cc().getAuthorizationManager()->checkAuthorization(
-                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
+        const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(
+                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog);
+        audit::logInProgAuthzCheck(
+                &cc(), q.query, isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+
+        if (!isAuthorized) {
             b.append("err", "unauthorized");
         }
         else {
-            DbMessage d(m);
-            QueryMessage q(d);
             bool all = q.query["$all"].trueValue();
             bool allMatching = q.query["$allMatching"].trueValue();
             vector<BSONObj> vals;
@@ -184,17 +189,21 @@ namespace mongo {
     }
 
     void killOp( Message &m, DbResponse &dbresponse ) {
+        DbMessage d(m);
+        QueryMessage q(d);
         BSONObj obj;
-        if (!cc().getAuthorizationManager()->checkAuthorization(
-                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
+        const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(
+                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop);
+        audit::logKillOpAuthzCheck(&cc(),
+                                   q.query,
+                                   isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+        if (!isAuthorized) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
         /*else if( !dbMutexInfo.isLocked() )
             obj = fromjson("{\"info\":\"no op in progress/not locked\"}");
             */
         else {
-            DbMessage d(m);
-            QueryMessage q(d);
             BSONElement e = q.query.getField("op");
             if( !e.isNumber() ) {
                 obj = fromjson("{\"err\":\"no op number field specified?\"}");
@@ -223,8 +232,11 @@ namespace mongo {
         try {
             if (!NamespaceString::isCommand(d.getns())) {
                 // Auth checking for Commands happens later.
-                Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
-                uassert(16550, status.reason(), status.isOK());
+                Client* client = &cc();
+                Status status = client->getAuthorizationManager()->checkAuthForQuery(d.getns());
+                audit::logQueryAuthzCheck(
+                        client, NamespaceString(d.getns()), q.query, status.code());
+                uassertStatusOK(status);
             }
             dbresponse.exhaustNS = runQuery(m, q, op, *resp);
             verify( !resp->empty() );
@@ -558,7 +570,9 @@ namespace mongo {
         const bool broadcast = flags & UpdateOption_Broadcast;
 
         Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
-        uassert(16538, status.reason(), status.isOK());
+        audit::logUpdateAuthzCheck(
+                &cc(), NamespaceString(ns), query, updateobj, upsert, multi, status.code());
+        uassertStatusOK(status);
 
         OpSettings settings;
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
@@ -585,9 +599,6 @@ namespace mongo {
         DbMessage d(m);
         const char *ns = d.getns();
 
-        Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
-        uassert(16542, status.reason(), status.isOK());
-
         op.debug().ns = ns;
         int flags = d.pullInt();
         verify(d.moreJSObjs());
@@ -595,6 +606,10 @@ namespace mongo {
 
         op.debug().query = pattern;
         op.setQuery(pattern);
+
+        Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
+        audit::logDeleteAuthzCheck(&cc(), NamespaceString(ns), pattern, status.code());
+        uassertStatusOK(status);
 
         const bool justOne = flags & RemoveOption_JustOne;
         const bool broadcast = flags & RemoveOption_Broadcast;
@@ -662,7 +677,8 @@ namespace mongo {
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
                 Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
-                uassert(16543, status.reason(), status.isOK());
+                audit::logGetMoreAuthzCheck(&cc(), NamespaceString(ns), cursorid, status.code());
+                uassertStatusOK(status);
 
                 // I (Zardosht), am not crazy about this, but I cannot think of
                 // better alternatives at the moment. The high level goal is to find
@@ -920,11 +936,7 @@ namespace mongo {
         op.debug().ns = ns;
 
         StringData coll = nsToCollectionSubstring(ns);
-        // Auth checking for index writes happens later.
-        if (coll != "system.indexes") {
-            Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
-            uassert(16544, status.reason(), status.isOK());
-        }
+        const bool sysIndexesInsert = coll == "system.indexes";
 
         if (!d.moreJSObjs()) {
             // strange.  should we complain?
@@ -933,7 +945,15 @@ namespace mongo {
 
         vector<BSONObj> objs;
         while (d.moreJSObjs()) {
-            objs.push_back(d.nextJsObj());
+            const BSONObj &obj = d.nextJsObj();
+            objs.push_back(obj);
+
+            // Auth checking for index writes happens later.
+            if (!sysIndexesInsert) {
+                Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+                audit::logInsertAuthzCheck(&cc(), NamespaceString(ns), obj, status.code());
+                uassertStatusOK(status);
+            }
         }
 
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
@@ -942,7 +962,7 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (coll == "system.indexes" && objs[0]["background"].trueValue()) {
+        if (sysIndexesInsert && objs[0]["background"].trueValue()) {
             // Can only build non-unique indexes in the background, because the
             // hot indexer does not know how to perform unique checks.
             uassert(17330, "cannot build unique indexes in the background, change to a foreground index or remove the unique constraint", !objs[0]["unique"].trueValue());
@@ -951,7 +971,7 @@ namespace mongo {
         }
 
         scoped_ptr<Client::ShardedOperationScope> scp;
-        if (coll != "system.indexes") {
+        if (!sysIndexesInsert) {
             scp.reset(new Client::ShardedOperationScope);
             if (scp->handlePossibleShardedMessage(m, 0)) {
                 return;
