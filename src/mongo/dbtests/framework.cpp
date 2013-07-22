@@ -32,8 +32,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/instance.h"
-#include "mongo/db/txn_complete_hooks.h"
-#include "mongo/db/storage/env.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/mutex.h"
@@ -114,7 +113,8 @@ namespace mongo {
             ("debug", "run tests with verbose output")
             ("list,l", "list available test suites")
             ("filter,f" , po::value<string>() , "string substring filter on test name" )
-            ("verbose,v", "be more verbose (include multiple times for more verbosity e.g. -vvvvv)")
+            ("verbose,v", "verbose")
+            ("testNewUpdateFramework", "test the new update framework")
             ("dur", "enable journaling (currently the default)")
             ("nodur", "disable journaling")
             ("seed", po::value<unsigned long long>(&seed), "random number seed")
@@ -158,8 +158,21 @@ namespace mongo {
                 return EXIT_CLEAN;
             }
 
-            if (params.count("debug") || params.count("verbose") ) {
-                logLevel = 1;
+            if (params.count("testNewUpdateFramework") && !mongo::isNewUpdateFrameworkEnabled()) {
+                mongo::toggleNewUpdateFrameworkEnabled();
+            }
+
+            bool nodur = false;
+            if( params.count("nodur") ) {
+                nodur = true;
+                cmdLine.dur = false;
+            }
+            if( params.count("dur") || cmdLine.dur ) {
+                cmdLine.dur = true;
+            }
+
+            if( params.count("nopreallocj") ) {
+                cmdLine.preallocj = false;
             }
 
             for (string s = "vv"; s.length() <= 10; s.append("v")) {
