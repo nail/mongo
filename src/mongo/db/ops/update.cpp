@@ -68,18 +68,58 @@ namespace mongo {
         return false;
     }
 
-    void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, BSONObj &newObj, 
-                         const BSONObj &updateobj,
-                         const bool fromMigrate,
-                         uint64_t flags) {
-        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty() && !hasClusteringSecondaryKey(cl)) {
-            // - operator style update gets applied as an update message
-            // - does not maintain sencondary indexes so we can only do it
-            // when no indexes were affected
-            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
-        } else {
-            cl->updateObject(pk, oldObj, newObj, fromMigrate, flags);
+    static void checkTooLarge(const BSONObj& newObj) {
+        uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
+    }
+
+    /**
+     * return a BSONObj with the _id field of the doc passed in. If no _id and multi, error.
+     */
+    BSONObj makeOplogEntryQuery(const BSONObj doc, bool multi) {
+        BSONObjBuilder idPattern;
+        BSONElement id;
+        // NOTE: If the matching object lacks an id, we'll log
+        // with the original pattern.  This isn't replay-safe.
+        // It might make sense to suppress the log instead
+        // if there's no id.
+        if ( doc.getObjectID( id ) ) {
+           idPattern.append( id );
+           return idPattern.obj();
+        }
+        else {
+           uassert( 10157, "multi-update requires all modified objects to have an _id" , ! multi );
+           return doc;
+        }
+    }
+
+    /* note: this is only (as-is) called for
+
+             - not multi
+             - not mods is indexed
+             - not upsert
+    */
+    static UpdateResult _updateById(bool isOperatorUpdate,
+                                    int idIdxNo,
+                                    ModSet* mods,
+                                    NamespaceDetails* d,
+                                    NamespaceDetailsTransient *nsdt,
+                                    bool su,
+                                    const char* ns,
+                                    const BSONObj& updateobj,
+                                    BSONObj patternOrig,
+                                    bool logop,
+                                    OpDebug& debug,
+                                    bool fromMigrate = false) {
+
+        DiskLoc loc;
+        {
+            IndexDetails& i = d->idx(idIdxNo);
+            BSONObj key = i.getKeyFromQuery( patternOrig );
+            loc = QueryRunner::fastFindSingle(i, key);
+            if( loc.isNull() ) {
+                // no upsert support in _updateById yet, so we are done.
+                return UpdateResult( 0 , 0 , 0 , BSONObj() );
+            }
         }
         cl->notifyOfWriteOp();
     }
@@ -334,9 +374,122 @@ namespace mongo {
                     c->advance();
                 }
 
-                // Multi updates need to do their own deduplication because updates may modify the
-                // keys the cursor is in the process of scanning over.
-                if ( seenObjects.count(currPK) ) {
+                BSONObj pattern = patternOrig;
+
+                if ( logop ) {
+                    BSONObj js = BSONObj::make(r);
+                    BSONObj idQuery = makeOplogEntryQuery(js, multi);
+                    pattern = idQuery;
+                }
+
+                /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
+                    regular ones at the moment. */
+                if ( isOperatorUpdate ) {
+
+                    if ( multi ) {
+                        // go to next record in case this one moves
+                        c->advance();
+
+                        // Update operations are deduped for cursors that implement their own
+                        // deduplication.  In particular, some geo cursors are excluded.
+                        if ( autoDedup ) {
+
+                            if ( seenObjects.count( loc ) ) {
+                                continue;
+                            }
+
+                            // SERVER-5198 Advance past the document to be modified, provided
+                            // deduplication is enabled, but see SERVER-5725.
+                            while( c->ok() && loc == c->currLoc() ) {
+                                c->advance();
+                            }
+                        }
+                    }
+
+                    const BSONObj& onDisk = loc.obj();
+
+                    ModSet* useMods = mods.get();
+
+                    auto_ptr<ModSet> mymodset;
+                    if ( details.hasElemMatchKey() && mods->hasDynamicArray() ) {
+                        useMods = mods->fixDynamicArray( details.elemMatchKey() );
+                        mymodset.reset( useMods );
+                    }
+
+                    auto_ptr<ModSetState> mss = useMods->prepare( onDisk,
+                                                                  false /* not an insertion */ );
+
+                    bool willAdvanceCursor = multi && c->ok() && ( modsIsIndexed || ! mss->canApplyInPlace() );
+
+                    if ( willAdvanceCursor ) {
+                        if ( cc.get() ) {
+                            cc->setDoingDeletes( true );
+                        }
+                        c->prepareToTouchEarlierIterate();
+                    }
+
+                    // If we've made it this far, "ns" must contain a valid collection name, and so
+                    // is of the form "db.collection".  Therefore, the following expression must
+                    // always be valid.  "system.users" updates must never be done in place, in
+                    // order to ensure that they are validated inside DataFileMgr::updateRecord(.).
+                    bool isSystemUsersMod = nsToCollectionSubstring(ns) == "system.users";
+
+                    BSONObj newObj;
+                    if ( !mss->isUpdateIndexed() && mss->canApplyInPlace() && !isSystemUsersMod ) {
+                        mss->applyModsInPlace( true );// const_cast<BSONObj&>(onDisk) );
+
+                        DEBUGUPDATE( "\t\t\t doing in place update" );
+                        if ( !multi )
+                            debug.fastmod = true;
+
+                        if ( modsIsIndexed ) {
+                            seenObjects.insert( loc );
+                        }
+                        newObj = loc.obj();
+                        d->paddingFits();
+                    }
+                    else {
+                        newObj = mss->createNewFromMods();
+                        checkTooLarge(newObj);
+                        DiskLoc newLoc = theDataFileMgr.updateRecord(ns,
+                                                                     d,
+                                                                     nsdt,
+                                                                     r,
+                                                                     loc,
+                                                                     newObj.objdata(),
+                                                                     newObj.objsize(),
+                                                                     debug);
+
+                        if ( newLoc != loc || modsIsIndexed ){
+                            // log() << "Moved obj " << newLoc.obj()["_id"] << " from " << loc << " to " << newLoc << endl;
+                            // object moved, need to make sure we don' get again
+                            seenObjects.insert( newLoc );
+                        }
+
+                    }
+
+                    if ( logop ) {
+                        DEV verify( mods->size() );
+                        BSONObj logObj = mss->getOpLogRewrite();
+                        DEBUGUPDATE( "\t rewrite update: " << logObj );
+
+                        // It is possible that the entire mod set was a no-op over this
+                        // document.  We would have an empty log record in that case. If we
+                        // call logOp, with an empty record, that would be replicated as "clear
+                        // this record", which is not what we want. Therefore, to get a no-op
+                        // in the replica, we simply don't log.
+                        if ( logObj.nFields() ) {
+                            logOp("u", ns, logObj , &pattern, 0, fromMigrate, &newObj );
+                        }
+                    }
+                    numModded++;
+                    if ( ! multi )
+                        return UpdateResult( 1 , 1 , numModded , BSONObj() );
+                    if ( willAdvanceCursor )
+                        c->recoverFromTouchingEarlierIterate();
+
+                    getDur().commitIfNeeded();
+
                     continue;
                 } else {
                     seenObjects.insert(currPK);
@@ -581,8 +734,8 @@ namespace mongo {
             // Log Obj
             if ( logop ) {
                 if ( !logObj.isEmpty() ) {
-                    BSONObj pattern = patternOrig;
-                    logOp("u", ns, logObj , &pattern, 0, fromMigrate, &newObj );
+                    BSONObj idQuery = driver.makeOplogEntryQuery(newObj, multi);
+                    logOp("u", ns, logObj , &idQuery, 0, fromMigrate, &newObj);
                 }
             }
 
