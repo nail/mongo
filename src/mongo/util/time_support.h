@@ -50,6 +50,10 @@ namespace mongo {
     // colonsOk should be false when creating filenames
     std::string terseCurrentTime(bool colonsOk=true);
 
+    // uses ISO 8601 dates without trailing Z
+    // colonsOk should be false when creating filenames
+    std::string terseCurrentTime(bool colonsOk=true);
+
     /**
      * Formats "time" according to the ISO 8601 extended form standard, including date,
      * and time, in the UTC timezone.
@@ -62,8 +66,7 @@ namespace mongo {
      * Formats "date" according to the ISO 8601 extended form standard, including date,
      * and time with milliseconds decimal component, in the UTC timezone.
      *
-     * @param timeStr pointer to the buffer to set the string - empirically, 64 bytes is enough for
-     * the buffer, 26 is not.
+     * Sample format: "2013-07-23T18:42:14.072Z"
      */
     std::string dateToISOStringUTC(Date_t date);
 
