@@ -23,6 +23,7 @@
 #include "mongo/logger/tee.h"
 #include "mongo/util/assert_util.h"  // TODO: remove apple dep for this in threadlocal.h
 #include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -88,9 +89,14 @@ namespace logger {
     LogstreamBuilder::~LogstreamBuilder() {
         if (_os) {
             _baseMessage += _os->str();
-            _domain->append(MessageEventEphemeral(_severity, _contextName, _baseMessage));
-            if (_tee)
-                _tee->write(_baseMessage);
+            MessageEventEphemeral message(curTimeMillis64(), _severity, _contextName, _baseMessage);
+            _domain->append(message);
+            if (_tee) {
+                _os->str("");
+                logger::MessageEventDetailsEncoder teeEncoder;
+                teeEncoder.encode(message, *_os);
+                _tee->write(_os->str());
+            }
             _os->str("");
             if (isThreadOstreamCacheInitialized && threadOstreamCache.getMake()->vector().empty()) {
                 threadOstreamCache.get()->mutableVector().push_back(_os);
