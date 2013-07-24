@@ -54,25 +54,29 @@ namespace mongo {
 #endif
     }
 
+    std::string time_t_to_String(time_t t) {
+        char buf[64];
 #if defined(_WIN32)
-    void curTimeString(char* timeStr) {
-        boost::xtime xt;
-        boost::xtime_get(&xt, MONGO_BOOST_TIME_UTC);
-        time_t_to_String(xt.sec, timeStr);
-
-        char* milliSecStr = timeStr + 19;
-        _snprintf(milliSecStr, 5, ".%03d", static_cast<int32_t>(xt.nsec / 1000000));
-    }
+        ctime_s(buf, sizeof(buf), &t);
 #else
-    void curTimeString(char* timeStr) {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        time_t_to_String(tv.tv_sec, timeStr);
-
-        char* milliSecStr = timeStr + 19;
-        snprintf(milliSecStr, 5, ".%03d", static_cast<int32_t>(tv.tv_usec / 1000));
-    }
+        ctime_r(&t, buf);
 #endif
+        buf[24] = 0; // don't want the \n
+        return buf;
+    }
+
+    std::string time_t_to_String_short(time_t t) {
+        char buf[64];
+#if defined(_WIN32)
+        ctime_s(buf, sizeof(buf), &t);
+#else
+        ctime_r(&t, buf);
+#endif
+        buf[19] = 0;
+        if( buf[0] && buf[1] && buf[2] && buf[3] )
+            return buf + 4; // skip day of week
+        return buf;
+    }
 
     // uses ISO 8601 dates without trailing Z
     // colonsOk should be false when creating filenames
@@ -93,6 +97,74 @@ namespace mongo {
         const char* fmt = "%Y-%m-%dT%H:%M:%SZ";
         char buf[32];
         fassert(16227, strftime(buf, sizeof(buf), fmt, &t) == 20);
+        return buf;
+    }
+
+    static inline std::string _dateToISOString(Date_t date, bool local) {
+        const int bufSize = 32;
+        char buf[bufSize];
+        struct tm t;
+        time_t_to_Struct(date.toTimeT(), &t, local);
+        int pos = strftime(buf, bufSize, MONGO_ISO_DATE_FMT_NO_TZ, &t);
+        fassert(16981, 0 < pos);
+        char* cur = buf + pos;
+        int bufRemaining = bufSize - pos;
+        pos = snprintf(cur, bufRemaining, ".%03d", static_cast<int32_t>(date.asInt64() % 1000));
+        fassert(16982, bufRemaining > pos && pos > 0);
+        cur += pos;
+        bufRemaining -= pos;
+        if (local) {
+            fassert(16983, bufRemaining >= 6);
+            strftime(cur, bufRemaining, "%z", &t);
+        }
+        else {
+            fassert(16984, bufRemaining >= 2);
+            *cur = 'Z';
+            ++cur;
+            *cur = '\0';
+        }
+        return buf;
+    }
+
+    std::string dateToISOStringUTC(Date_t date) {
+        return _dateToISOString(date, false);
+    }
+
+    std::string dateToISOStringLocal(Date_t date) {
+        return _dateToISOString(date, true);
+    }
+
+#undef MONGO_ISO_DATE_FMT_NO_TZ
+
+    void Date_t::toTm(tm* buf) {
+        time_t dtime = toTimeT();
+#if defined(_WIN32)
+        gmtime_s(buf, &dtime);
+#else
+        gmtime_r(&dtime, buf);
+#endif
+    }
+
+    std::string Date_t::toString() const {
+        return time_t_to_String(toTimeT());
+    }
+
+    time_t Date_t::toTimeT() const {
+        verify((long long)millis >= 0); // TODO when millis is signed, delete 
+        verify(((long long)millis/1000) < (std::numeric_limits<time_t>::max)());
+        return millis / 1000;
+    }
+
+    std::string dateToCtimeString(Date_t date) {
+        time_t t = date.toTimeT();
+        char buf[64];
+#if defined(_WIN32)
+        ctime_s(buf, sizeof(buf), &t);
+#else
+        ctime_r(&t, buf);
+#endif
+        char* milliSecStr = buf + 19;
+        snprintf(milliSecStr, 5, ".%03d", static_cast<int32_t>(date.asInt64() % 1000));
         return buf;
     }
 
