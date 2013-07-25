@@ -23,6 +23,8 @@
 
 #include <boost/scoped_array.hpp>
 
+#include <boost/scoped_array.hpp>
+
 #include "mongo/util/processinfo.h"
 
 using namespace std;
