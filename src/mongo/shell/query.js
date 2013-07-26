@@ -163,7 +163,11 @@ DBQuery.prototype.count = function( applySkipLimit ){
     if ( this._query ){
         if ( this._special )
             cmd.query = this._query.query;
-        else 
+            if ( this._query.$maxTimeMS ) {
+                cmd.$maxTimeMS = this._query.$maxTimeMS;
+            }
+        }
+        else {
             cmd.query = this._query;
     }
     cmd.fields = this._fields || {};
@@ -236,6 +240,10 @@ DBQuery.prototype.max = function( max ) {
 
 DBQuery.prototype.showDiskLoc = function() {
     return this._addSpecial( "$showDiskLoc" , true);
+}
+
+DBQuery.prototype.maxTimeMS = function( maxTimeMS ) {
+    return this._addSpecial( "$maxTimeMS" , maxTimeMS );
 }
 
 /**
