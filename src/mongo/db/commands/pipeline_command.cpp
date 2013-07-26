@@ -102,6 +102,12 @@ namespace mongo {
                 id = 0;
             }
 
+            if (cursor) {
+                // If a time limit was set on the pipeline, remaining time is "rolled over" to the
+                // cursor (for use by future getmore ops).
+                cursor->setLeftoverMaxTimeMicros( cc().curop()->getRemainingMaxTimeMicros() );
+            }
+
             BSONObjBuilder cursorObj(result.subobjStart("cursor"));
             cursorObj.append("id", id);
             cursorObj.append("ns", cursor->ns());
