@@ -680,8 +680,6 @@ for x in normalTools:
                                            LIBDEPS=["alltools"]) )
     addBuildRpath(env, tool)
 
-env.StaticLibrary("docgenerator", "tools/docgenerator.cpp")
-
 #some special tools
 env.Install( '#/', [
         env.Program( "mongofiles", "tools/files.cpp", LIBS=env['LIBS'] + tokulibs, LIBDEPS=["alltools", "gridfs"] ),
