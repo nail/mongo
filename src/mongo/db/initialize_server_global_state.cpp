@@ -139,6 +139,30 @@ namespace mongo {
                 return false;
             }
         }
+#endif  // !defined(_WIN32)
+        return true;
+    }
+
+    void forkServerOrDie() {
+        if (!forkServer())
+            _exit(EXIT_FAILURE);
+    }
+
+    MONGO_INITIALIZER_GENERAL(ServerLogRedirection,
+                              ("GlobalLogManager", "completedStartupConfig"),
+                              ("default"))(
+            InitializerContext*) {
+
+        using logger::LogManager;
+        using logger::MessageEventEphemeral;
+        using logger::MessageEventDetailsEncoder;
+        using logger::MessageEventWithContextEncoder;
+        using logger::MessageLogDomain;
+        using logger::RotatableFileAppender;
+        using logger::StatusWithRotatableFileWriter;
+
+#ifndef _WIN32
+        using logger::SyslogAppender;
 
         if (cmdLine.logWithSyslog) {
             StringBuilder sb;
