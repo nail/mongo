@@ -66,9 +66,12 @@ namespace mongo {
         long long nscanned;
         bool idhack;         // indicates short circuited code path on an update to make the update faster
         bool scanAndOrder;   // scanandorder query plan aspect was used
-        long long nupdated; // number of records updated
-        long long ninserted;
-        long long ndeleted;
+        long long  nupdated; // number of records updated (including no-ops)
+        long long  nupdateNoops; // number of records updated which were noops
+        long long  nmoved;   // updates resulted in a move (moves are expensive)
+        long long  ninserted;
+        long long  ndeleted;
+        bool fastmod;
         bool fastmodinsert;  // upsert of an $operation. builds a default object
         bool upsert;         // true if the update actually did an insert
         int keyUpdates;
