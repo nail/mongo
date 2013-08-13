@@ -114,7 +114,7 @@ namespace mongo {
             ("list,l", "list available test suites")
             ("filter,f" , po::value<string>() , "string substring filter on test name" )
             ("verbose,v", "verbose")
-            ("testNewUpdateFramework", "test the new update framework")
+            ("useNewQueryFramework", "use the new query framework")
             ("dur", "enable journaling (currently the default)")
             ("nodur", "disable journaling")
             ("seed", po::value<unsigned long long>(&seed), "random number seed")
@@ -158,8 +158,8 @@ namespace mongo {
                 return EXIT_CLEAN;
             }
 
-            if (params.count("testNewUpdateFramework") && !mongo::isNewUpdateFrameworkEnabled()) {
-                mongo::toggleNewUpdateFrameworkEnabled();
+            if (params.count("useNewQueryFramework")) {
+                mongo::enableNewQueryFramework();
             }
 
             bool nodur = false;

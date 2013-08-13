@@ -25,9 +25,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/ops/update.h"
-#include "mongo/db/ops/update_internal.h"
-
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace UpdateTests {
 
@@ -1262,6 +1260,29 @@ namespace UpdateTests {
         }
     };
 
+    namespace {
+
+        /**
+         * Comparator between two BSONObjects that takes in consideration only the keys and
+         * direction described in the sort pattern.
+         *
+         * TODO: This was pulled from update_internal.h, we should verify that these tests work
+         * with the new update framework $push sorter.
+         */
+        struct ProjectKeyCmp {
+            BSONObj sortPattern;
+
+            ProjectKeyCmp( BSONObj pattern ) : sortPattern( pattern) {}
+
+            int operator()( const BSONObj& left, const BSONObj& right ) const {
+                BSONObj keyLeft = left.extractFields( sortPattern, true );
+                BSONObj keyRight = right.extractFields( sortPattern, true );
+                return keyLeft.woCompare( keyRight, sortPattern ) < 0;
+            }
+        };
+
+    } // namespace
+
     class PushSortSortMixed  {
     public:
         void run() {
@@ -1631,18 +1652,6 @@ namespace UpdateTests {
         }
     };
 
-    class IndexModSet : public SetBase {
-    public:
-        void run() {
-            client().ensureIndex( ns(), BSON( "a.b" << 1 ) );
-            client().insert( ns(), fromjson( "{'_id':0,a:{b:3}}" ) );
-            client().update( ns(), Query(), fromjson( "{$set:{'a.b':4}}" ) );
-            ASSERT_EQUALS( fromjson( "{'_id':0,a:{b:4}}" ) , client().findOne( ns(), Query() ) );
-            ASSERT_EQUALS( fromjson( "{'_id':0,a:{b:4}}" ) , client().findOne( ns(), fromjson( "{'a.b':4}" ) ) ); // make sure the index works
-        }
-    };
-
-
     class PreserveIdWithIndex : public SetBase { // Not using $set, but base class is still useful
     public:
         void run() {
@@ -1710,189 +1719,6 @@ namespace UpdateTests {
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 << "b" << 1 << "x" << 10 ),
                           client().findOne( ns(), BSONObj() ) );
         }
-    };
-    
-    namespace ModSetTests {
-
-        class internal1 {
-        public:
-            void run() {
-                BSONObj b = BSON( "$inc" << BSON( "x" << 1 << "a.b" << 1 ) );
-                ModSet m(b);
-
-                ASSERT( m.haveModForField( "x" ) );
-                ASSERT( m.haveModForField( "a.b" ) );
-                ASSERT( ! m.haveModForField( "y" ) );
-                ASSERT( ! m.haveModForField( "a.c" ) );
-                ASSERT( ! m.haveModForField( "a" ) );
-
-                ASSERT( m.haveConflictingMod( "x" ) );
-                ASSERT( m.haveConflictingMod( "a" ) );
-                ASSERT( m.haveConflictingMod( "a.b" ) );
-                ASSERT( ! m.haveConflictingMod( "a.bc" ) );
-                ASSERT( ! m.haveConflictingMod( "a.c" ) );
-                ASSERT( ! m.haveConflictingMod( "a.a" ) );
-            }
-        };
-
-        class Base {
-        public:
-
-            virtual ~Base() {}
-
-
-            void test( BSONObj morig , BSONObj in , BSONObj wanted ) {
-                BSONObj m = morig.copy();
-                ModSet set(m);
-
-                BSONObj out = set.prepare(in)->createNewFromMods();
-                ASSERT_EQUALS( wanted , out );
-            }
-        };
-
-        class inc1 : public Base {
-        public:
-            void run() {
-                BSONObj m = BSON( "$inc" << BSON( "x" << 1 ) );
-                test( m , BSON( "x" << 5 )  , BSON( "x" << 6 ) );
-                test( m , BSON( "a" << 5 )  , BSON( "a" << 5 << "x" << 1 ) );
-                test( m , BSON( "z" << 5 )  , BSON( "x" << 1 << "z" << 5 ) );
-            }
-        };
-
-        class inc2 : public Base {
-        public:
-            void run() {
-                BSONObj m = BSON( "$inc" << BSON( "a.b" << 1 ) );
-                test( m , BSONObj() , BSON( "a" << BSON( "b" << 1 ) ) );
-                test( m , BSON( "a" << BSON( "b" << 2 ) ) , BSON( "a" << BSON( "b" << 3 ) ) );
-
-                m = BSON( "$inc" << BSON( "a.b" << 1 << "a.c" << 1 ) );
-                test( m , BSONObj() , BSON( "a" << BSON( "b" << 1 << "c" << 1 ) ) );
-
-
-            }
-        };
-
-        class set1 : public Base {
-        public:
-            void run() {
-                test( BSON( "$set" << BSON( "x" << 17 ) ) , BSONObj() , BSON( "x" << 17 ) );
-                test( BSON( "$set" << BSON( "x" << 17 ) ) , BSON( "x" << 5 ) , BSON( "x" << 17 ) );
-
-                test( BSON( "$set" << BSON( "x.a" << 17 ) ) , BSON( "z" << 5 ) , BSON( "x" << BSON( "a" << 17 )<< "z" << 5 ) );
-            }
-        };
-
-        class push1 : public Base {
-        public:
-            void run() {
-                test( BSON( "$push" << BSON( "a" << 5 ) ) , fromjson( "{a:[1]}" ) , fromjson( "{a:[1,5]}" ) );
-            }
-        };
-
-        class PositionalWithoutElemMatchKey {
-        public:
-            void run() {
-                BSONObj querySpec = BSONObj();
-                BSONObj modSpec = BSON( "$set" << BSON( "a.$" << 1 ) );
-                ModSet modSet( modSpec );
-
-                // A positional operator must be replaced with an array index before calling
-                // prepare().
-                ASSERT_THROWS( modSet.prepare( querySpec ), UserException );
-            }
-        };
-
-        class PositionalWithoutNestedElemMatchKey {
-        public:
-            void run() {
-                BSONObj querySpec = BSONObj();
-                BSONObj modSpec = BSON( "$set" << BSON( "a.b.c.$.e.f" << 1 ) );
-                ModSet modSet( modSpec );
-
-                // A positional operator must be replaced with an array index before calling
-                // prepare().
-                ASSERT_THROWS( modSet.prepare( querySpec ), UserException );
-            }
-        };
-
-        class DbrefPassesPositionalValidation {
-        public:
-            void run() {
-                BSONObj querySpec = BSONObj();
-                BSONObj modSpec = BSON( "$set" << BSON( "a.$ref" << "foo" << "a.$id" << 0 ) );
-                ModSet modSet( modSpec );
-
-                // A positional operator must be replaced with an array index before calling
-                // prepare(), but $ prefixed fields encoding dbrefs are allowed.
-                modSet.prepare( querySpec ); // Does not throw.
-            }
-        };
-
-        class CreateNewFromQueryExcludeNot {
-        public:
-            void run() {
-                BSONObj querySpec = BSON( "a" << BSON( "$not" << BSON( "$lt" << 1 ) ) );
-                BSONObj modSpec = BSON( "$set" << BSON( "b" << 1 ) );
-                ModSet modSet( modSpec );
-
-                // Because a $not operator is applied to the 'a' field, the 'a' field is excluded
-                // from the resulting document.
-                ASSERT_EQUALS( BSON( "b" << 1 ), modSet.createNewFromQuery( querySpec ) );
-            }
-        };
-    };
-
-    namespace Invertible {
-        class SimpleInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1)));
-
-                mods = BSON("$inc" << BSON("a" << 0));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 0)));
-
-                mods = BSON("$inc" << BSON("a" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 1)));
-
-                mods = BSON("$inc" << BSON("a" << 12345678));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -12345678)));
-            }
-        };
-        class DoubleInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1 << "b" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1 << "b" << 1)));
-            }
-        };
-        class RepeatedInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << -1)));
-            }
-        };
-        class MixedInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << 1)));
-
-                mods = BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << -1)));
-            }
-        };
     };
 
     namespace basic {
@@ -2202,29 +2028,12 @@ namespace UpdateTests {
             add< DontDropEmpty >();
             add< InsertInEmpty >();
             add< IndexParentOfMod >();
-            add< IndexModSet >();
             add< PreserveIdWithIndex >();
             add< CheckNoMods >();
             add< UpdateMissingToNull >();
             add< TwoModsWithinDuplicatedField >();
             add< ThreeModsWithinDuplicatedField >();
             add< TwoModsBeforeExistingField >();
-
-            add< ModSetTests::internal1 >();
-            add< ModSetTests::inc1 >();
-            add< ModSetTests::inc2 >();
-            add< ModSetTests::set1 >();
-            add< ModSetTests::push1 >();
-
-            add< ModSetTests::PositionalWithoutElemMatchKey >();
-            add< ModSetTests::PositionalWithoutNestedElemMatchKey >();
-            add< ModSetTests::DbrefPassesPositionalValidation >();
-            add< ModSetTests::CreateNewFromQueryExcludeNot >();
-            add< Invertible::SimpleInc>();
-            add< Invertible::DoubleInc>();
-            add< Invertible::RepeatedInc>();
-            add< Invertible::MixedInc>();
-
             add< basic::inc1 >();
             add< basic::inc2 >();
             add< basic::inc3 >();
