@@ -216,8 +216,13 @@ namespace mongo {
                     if ( ! returnNew ) {
                         _appendHelper( result , doc , found , fields );
                     }
-
-                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false );
+                    
+                    UpdateResult res = mongo::update(
+                        UpdateRequest(NamespaceString(ns), cc().curop()->debug())
+                        .query(queryModified)
+                        .updates(update)
+                        .upsert(upsert)
+                        .updateOpLog());
 
                     if ( returnNew ) {
                         if ( res.upserted.isSet() ) {
@@ -240,7 +245,7 @@ namespace mongo {
 
                     BSONObjBuilder le( result.subobjStart( "lastErrorObject" ) );
                     le.appendBool( "updatedExisting" , res.existing );
-                    le.appendNumber( "n" , res.num );
+                    le.appendNumber( "n" , res.numMatched );
                     if ( res.upserted.isSet() )
                         le.append( "upserted" , res.upserted );
                     le.done();
