@@ -44,6 +44,9 @@
 #include "mongo/util/map_util.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/net/listen.h"
+#include "mongo/util/options_parser/environment.h"
+#include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/options_parser/options_parser.h"
 #include "mongo/util/password.h"
 
 #ifdef _WIN32
@@ -169,22 +172,26 @@ namespace {
         ;
         
 
-#ifdef MONGO_SSL
-        ssl_options.add_options()
-        ("sslOnNormalPorts" , "use ssl on configured ports" )
-        ("sslPEMKeyFile" , po::value<string>(), "PEM file for ssl" )
-        ("sslPEMKeyPassword" , po::value<string>()->implicit_value(""),
-         "PEM file password" )
-        ("sslClusterFile", po::value<string>(),
-         "Key file for internal SSL authentication" )
-        ("sslClusterPassword", po::value<string>()->implicit_value(""),
-         "Internal authentication key file password" )
-        ("sslCAFile", po::value<std::string>(),
-         "Certificate Authority file for SSL")
-        ("sslCRLFile", po::value<std::string>(),
-         "Certificate Revocation List file for SSL")
-        ("sslWeakCertificateValidation", "allow client to connect without presenting a certificate")
-        ("sslFIPSMode", "activate FIPS 140-2 mode at startup")
+        if (argv.empty()) {
+            return Status(ErrorCodes::InternalError, "Cannot get binary name: argv array is empty");
+        }
+
+        // setup binary name
+        cmdLine.binaryName = argv[0];
+        size_t i = cmdLine.binaryName.rfind( '/' );
+        if ( i != string::npos ) {
+            cmdLine.binaryName = cmdLine.binaryName.substr( i + 1 );
+        }
+        return Status::OK();
+    }
+
+    Status CmdLine::setupCwd() {
+            // setup cwd
+        char buffer[1024];
+#ifdef _WIN32
+        verify( _getcwd( buffer , 1000 ) );
+#else
+        verify( getcwd( buffer , 1000 ) );
 #endif
         ;
         
@@ -197,22 +204,16 @@ namespace {
         ;
     }
 
-#if defined(_WIN32)
-    void CmdLine::addWindowsOptions( boost::program_options::options_description& windows ,
-                                     boost::program_options::options_description& hidden ) {
-        windows.add_options()
-        ("install", "install Windows service")
-        ("remove", "remove Windows service")
-        ("reinstall", "reinstall Windows service (equivalent to --remove followed by --install)")
-        ("serviceName", po::value<string>(), "Windows service name")
-        ("serviceDisplayName", po::value<string>(), "Windows service display name")
-        ("serviceDescription", po::value<string>(), "Windows service description")
-        ("serviceUser", po::value<string>(), "account for service execution")
-        ("servicePassword", po::value<string>(), "password used to authenticate serviceUser")
-        ;
-        hidden.add_options()("service", "start mongodb service");
+    Status CmdLine::setArgvArray(const std::vector<std::string>& argv) {
+        BSONArrayBuilder b;
+        std::vector<std::string> censoredArgv = argv;
+        censor(&censoredArgv);
+        for (size_t i=0; i < censoredArgv.size(); i++) {
+            b << censoredArgv[i];
+        }
+        argvArray = b.arr();
+        return Status::OK();
     }
-#endif
 
     void CmdLine::parseConfigFile( istream &f, stringstream &ss ) {
         string s;
@@ -240,68 +241,52 @@ namespace {
             } else {
                 cerr << "warning: remove or comment out this line by starting it with \'#\', skipping now : " << line << endl;
             }
+            else if (type == typeid(int))
+                builder->append(key, value.as<int>());
+            else if (type == typeid(double))
+                builder->append(key, value.as<double>());
+            else if (type == typeid(bool))
+                builder->appendBool(key, value.as<bool>());
+            else if (type == typeid(long))
+                builder->appendNumber(key, (long long)value.as<long>());
+            else if (type == typeid(unsigned))
+                builder->appendNumber(key, (long long)value.as<unsigned>());
+            else if (type == typeid(unsigned long long))
+                builder->appendNumber(key, (long long)value.as<unsigned long long>());
+            else if (type == typeid(vector<string>))
+                builder->append(key, value.as<vector<string> >());
+            else
+                builder->append(key, "UNKNOWN TYPE: " + demangleName(type));
+        }
+        return Status::OK();
+    }
+} // namespace
+
+    Status CmdLine::setParsedOpts(moe::Environment& params) {
+        const std::map<moe::Key, moe::Value> paramsMap = params.getExplicitlySet();
+        BSONObjBuilder builder;
+        Status ret = valueMapToBSON(paramsMap, &builder);
+        if (!ret.isOK()) {
+            return ret;
         }
         return;
     }
 
-    bool CmdLine::store( const std::vector<std::string>& argv,
-                         boost::program_options::options_description& visible,
-                         boost::program_options::options_description& hidden,
-                         boost::program_options::positional_options_description& positional,
-                         boost::program_options::variables_map &params ) {
+    Status CmdLine::store( const std::vector<std::string>& argv,
+                           moe::OptionSection& options,
+                           moe::Environment& params ) {
 
-
-        if (argv.empty())
-            return false;
-
-        {
-            // setup binary name
-            cmdLine.binaryName = argv[0];
-            size_t i = cmdLine.binaryName.rfind( '/' );
-            if ( i != string::npos )
-                cmdLine.binaryName = cmdLine.binaryName.substr( i + 1 );
-            
-            // setup cwd
-            char buffer[1024];
-#ifdef _WIN32
-            verify( _getcwd( buffer , 1000 ) );
-#else
-            verify( getcwd( buffer , 1000 ) );
-#endif
-            cmdLine.cwd = buffer;
+        Status ret = CmdLine::setupBinaryName(argv);
+        if (!ret.isOK()) {
+            return ret;
         }
-        
 
-        /* don't allow guessing - creates ambiguities when some options are
-         * prefixes of others. allow long disguises and don't allow guessing
-         * to get away with our vvvvvvv trick. */
-        int style = (((po::command_line_style::unix_style ^
-                       po::command_line_style::allow_guessing) |
-                      po::command_line_style::allow_long_disguise) ^
-                     po::command_line_style::allow_sticky);
+        ret = CmdLine::setupCwd();
+        if (!ret.isOK()) {
+            return ret;
+        }
 
-
-        try {
-
-            po::options_description all;
-            all.add( visible );
-            all.add( hidden );
-
-            po::store( po::command_line_parser(std::vector<std::string>(argv.begin() + 1,
-                                                                        argv.end()))
-                       .options( all )
-                       .positional( positional )
-                       .style( style )
-                       .run(),
-                       params );
-
-            if ( params.count("config") ) {
-                ifstream f( params["config"].as<string>().c_str() );
-                if ( ! f.is_open() ) {
-                    cout << "ERROR: could not read from config file" << endl << endl;
-                    cout << visible << endl;
-                    return false;
-                }
+        moe::OptionsParser parser;
 
                 stringstream ss;
                 CmdLine::parseConfigFile( f, ss );
@@ -309,11 +294,10 @@ namespace {
                 f.close();
             }
         }
-        catch (po::error &e) {
-            cout << "error command line: " << e.what() << endl;
-            cout << "use --help for help" << endl;
-            //cout << visible << endl;
-            return false;
+
+        ret = CmdLine::setArgvArray(argv);
+        if (!ret.isOK()) {
+            return ret;
         }
 
         {
@@ -421,8 +405,7 @@ namespace {
             cmdLine.maxConns = params["maxConns"].as<int>();
 
             if ( cmdLine.maxConns < 5 ) {
-                out() << "maxConns has to be at least 5" << endl;
-                return false;
+                return Status(ErrorCodes::BadValue, "maxConns has to be at least 5");
             }
         }
 
@@ -431,8 +414,7 @@ namespace {
         }
         if (params.count("noobjcheck")) {
             if (params.count("objcheck")) {
-                out() << "can't have both --objcheck and --noobjcheck" << endl;
-                return false;
+                return Status(ErrorCodes::BadValue, "can't have both --objcheck and --noobjcheck");
             }
             cmdLine.objcheck = false;
         }
@@ -472,16 +454,16 @@ namespace {
                 MessageEventDetailsEncoder::setDateFormatter(dateToISOStringLocal);
             }
             else {
-                cout << "Value of logTimestampFormat must be one of ctime, iso8601-utc or "
-                    "iso8601-local; not \"" << formatterName << "\"." << endl;
-                return false;
+                StringBuilder sb;
+                sb << "Value of logTimestampFormat must be one of ctime, iso8601-utc " <<
+                      "or iso8601-local; not \"" << formatterName << "\".";
+                return Status(ErrorCodes::BadValue, sb.str());
             }
         }
         if (params.count("logpath")) {
             cmdLine.logpath = params["logpath"].as<string>();
             if (cmdLine.logpath.empty()) {
-                cout << "logpath cannot be empty if supplied" << endl;
-                return false;
+                return Status(ErrorCodes::BadValue, "logpath cannot be empty if supplied");
             }
         }
 
@@ -492,13 +474,11 @@ namespace {
         cmdLine.logWithSyslog = params.count("syslog");
         cmdLine.logAppend = params.count("logappend");
         if (!cmdLine.logpath.empty() && cmdLine.logWithSyslog) {
-            cout << "Cant use both a logpath and syslog " << endl;
-            return false;
+            return Status(ErrorCodes::BadValue, "Cant use both a logpath and syslog ");
         }
 
         if (cmdLine.doFork && cmdLine.logpath.empty() && !cmdLine.logWithSyslog) {
-            cout << "--fork has to be used with --logpath or --syslog" << endl;
-            return false;
+            return Status(ErrorCodes::BadValue, "--fork has to be used with --logpath or --syslog");
         }
 
         if (params.count("keyFile")) {
@@ -525,27 +505,29 @@ namespace {
                 std::string name;
                 std::string value;
                 if (!mongoutils::str::splitOn(parameters[i], '=', name, value)) {
-                    cout << "Illegal option assignment: \"" << parameters[i] << "\"" << endl;
-                    return false;
+                    StringBuilder sb;
+                    sb << "Illegal option assignment: \"" << parameters[i] << "\"";
+                    return Status(ErrorCodes::BadValue, sb.str());
                 }
                 ServerParameter* parameter = mapFindWithDefault(
                         ServerParameterSet::getGlobal()->getMap(),
                         name,
                         static_cast<ServerParameter*>(NULL));
                 if (NULL == parameter) {
-                    cout << "Illegal --setParameter parameter: \"" << name << "\"" << endl;
-                    return false;
+                    StringBuilder sb;
+                    sb << "Illegal --setParameter parameter: \"" << name << "\"";
+                    return Status(ErrorCodes::BadValue, sb.str());
                 }
                 if (!parameter->allowedToChangeAtStartup()) {
-                    cout << "Cannot use --setParameter to set \"" << name << "\" at startup" <<
-                        endl;
-                    return false;
+                    StringBuilder sb;
+                    sb << "Cannot use --setParameter to set \"" << name << "\" at startup";
+                    return Status(ErrorCodes::BadValue, sb.str());
                 }
                 Status status = parameter->setFromString(value);
                 if (!status.isOK()) {
-                    cout << "Bad value for parameter \"" << name << "\": " << status.reason()
-                         << endl;
-                    return false;
+                    StringBuilder sb;
+                    sb << "Bad value for parameter \"" << name << "\": " << status.reason();
+                    return Status(ErrorCodes::BadValue, sb.str());
                 }
             }
         }
@@ -555,34 +537,34 @@ namespace {
 
 #ifdef MONGO_SSL
 
-        if (params.count("sslPEMKeyFile")) {
-            cmdLine.sslPEMKeyFile = params["sslPEMKeyFile"].as<string>();
+        if (params.count("ssl.PEMKeyFile")) {
+            cmdLine.sslPEMKeyFile = params["ssl.PEMKeyFile"].as<string>();
         }
 
-        if (params.count("sslPEMKeyPassword")) {
-            cmdLine.sslPEMKeyPassword = params["sslPEMKeyPassword"].as<string>();
+        if (params.count("ssl.PEMKeyPassword")) {
+            cmdLine.sslPEMKeyPassword = params["ssl.PEMKeyPassword"].as<string>();
         }
 
-        if (params.count("sslClusterFile")) {
-            cmdLine.sslClusterFile = params["sslClusterFile"].as<string>();
+        if (params.count("ssl.clusterFile")) {
+            cmdLine.sslClusterFile = params["ssl.clusterFile"].as<string>();
         }
 
-        if (params.count("sslClusterPassword")) {
-            cmdLine.sslClusterPassword = params["sslClusterPassword"].as<string>();
+        if (params.count("ssl.clusterPassword")) {
+            cmdLine.sslClusterPassword = params["ssl.clusterPassword"].as<string>();
         }
 
-        if (params.count("sslCAFile")) {
-            cmdLine.sslCAFile = params["sslCAFile"].as<std::string>();
+        if (params.count("ssl.CAFile")) {
+            cmdLine.sslCAFile = params["ssl.CAFile"].as<std::string>();
         }
 
-        if (params.count("sslCRLFile")) {
-            cmdLine.sslCRLFile = params["sslCRLFile"].as<std::string>();
+        if (params.count("ssl.CRLFile")) {
+            cmdLine.sslCRLFile = params["ssl.CRLFile"].as<std::string>();
         }
 
-        if (params.count("sslWeakCertificateValidation")) {
+        if (params.count("ssl.weakCertificateValidation")) {
             cmdLine.sslWeakCertificateValidation = true;
         }
-        if (params.count("sslOnNormalPorts")) {
+        if (params.count("ssl.sslOnNormalPorts")) {
             cmdLine.sslOnNormalPorts = true;
             if ( cmdLine.sslPEMKeyFile.size() == 0 ) {
                 log() << "need sslPEMKeyFile" << endl;
@@ -590,8 +572,8 @@ namespace {
             }
             if (cmdLine.sslWeakCertificateValidation &&
                 cmdLine.sslCAFile.empty()) {
-                log() << "need sslCAFile with sslWeakCertificateValidation" << endl;
-                return false;
+                return Status(ErrorCodes::BadValue,
+                              "need sslCAFile with sslWeakCertificateValidation");
             }
             if (params.count("sslFIPSMode")) {
                 cmdLine.sslFIPSMode = true;
@@ -605,15 +587,13 @@ namespace {
                  cmdLine.sslCRLFile.size() ||
                  cmdLine.sslWeakCertificateValidation ||
                  cmdLine.sslFIPSMode) {
-            log() << "need to enable sslOnNormalPorts" << endl;
-            return false;
+            return Status(ErrorCodes::BadValue, "need to enable sslOnNormalPorts");
         }
         if (cmdLine.clusterAuthMode == "sendKeyfile" || 
             cmdLine.clusterAuthMode == "sendX509" || 
             cmdLine.clusterAuthMode == "x509") {
             if (!cmdLine.sslOnNormalPorts){
-                log() << "need to enable sslOnNormalPorts" << endl;
-                return false;
+                return Status(ErrorCodes::BadValue, "need to enable sslOnNormalPorts");
             }
         }
         else if (cmdLine.clusterAuthMode != "keyfile") {
@@ -628,12 +608,13 @@ namespace {
         }
 #endif
 
-        return true;
+        return Status::OK();
     }
 
     static bool _isPasswordArgument(const char* argumentName) {
         static const char* const passwordArguments[] = {
             "sslPEMKeyPassword",
+            "ssl.PEMKeyPassword",
             "servicePassword",
             NULL  // Last entry sentinel.
         };

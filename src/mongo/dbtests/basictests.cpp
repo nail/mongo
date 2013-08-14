@@ -642,7 +642,6 @@ namespace BasicTests {
 
             add< HostAndPortTests >();
             add< RelativePathTest >();
-            add< CmdLineParseConfigTest >();
 
             add< CompressionTest1 >();
 

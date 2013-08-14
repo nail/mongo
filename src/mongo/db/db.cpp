@@ -78,6 +78,8 @@
 #include "mongo/util/net/message_server.h"
 #include "mongo/util/net/ssl_manager.h"
 #include "mongo/util/ntservice.h"
+#include "mongo/util/options_parser/environment.h"
+#include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
@@ -110,6 +112,8 @@ namespace mongo {
 #endif
 
     CmdLine cmdLine;
+    moe::Environment params;
+    moe::OptionSection options("Allowed options");
     static bool scriptingEnabled = true;
     static bool httpInterface = false;
     bool shouldRepairDatabases = 0;
@@ -960,18 +964,14 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     buildOptionsDescriptions(&visible_options, &hidden_options, &positional_options);
 
     {
-        po::variables_map params;
-
-        if (!CmdLine::store(argv,
-                            visible_options,
-                            hidden_options,
-                            positional_options,
-                            params)) {
-            ::_exit(EXIT_FAILURE);
+        ret = CmdLine::store(argv, options, params);
+        if (!ret.isOK()) {
+            std::cerr << "Error parsing command line: " << ret.toString() << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
 
         if (params.count("help")) {
-            show_help_text(visible_options);
+            std::cout << options.helpString() << std::endl;
             ::_exit(EXIT_SUCCESS);
         }
         if (params.count("version")) {
@@ -1141,8 +1141,8 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("httpinterface")) {
             if (params.count("nohttpinterface")) {
-                log() << "can't have both --httpinterface and --nohttpinterface" << endl;
-                ::_exit( EXIT_BADOPTIONS );
+                std::cerr << "can't have both --httpinterface and --nohttpinterface" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
             httpInterface = true;
         }
@@ -1164,8 +1164,8 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("diaglog")) {
             int x = params["diaglog"].as<int>();
             if ( x < 0 || x > 7 ) {
-                out() << "can't interpret --diaglog setting" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                std::cerr << "can't interpret --diaglog setting" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
             _diaglog.setLevel(x);
         }
@@ -1193,9 +1193,10 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("autoresync")) {
             replSettings.autoresync = true;
             if( params.count("replSet") ) {
-                out() << "--autoresync is not used with --replSet" << endl;
-                out() << "see http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                std::cerr << "--autoresync is not used with --replSet\nsee "
+                          << "http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember"
+                          << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
         }
         if (params.count("source")) {
@@ -1207,12 +1208,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("replSet")) {
             if (params.count("slavedelay")) {
-                out() << "--slavedelay cannot be used with --replSet" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                std::cerr << "--slavedelay cannot be used with --replSet" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
             else if (params.count("only")) {
-                out() << "--only cannot be used with --replSet" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                std::cerr << "--only cannot be used with --replSet" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
             /* seed list of hosts for the repl set */
             cmdLine._replSet = params["replSet"].as<string>().c_str();
@@ -1249,16 +1250,16 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             }
             if( params.count("shardsvr") ) {
                 if( params.count("configsvr") ) {
-                    log() << "can't do --shardsvr and --configsvr at the same time" << endl;
-                    dbexit( EXIT_BADOPTIONS );
+                    std::cerr << "can't do --shardsvr and --configsvr at the same time" << std::endl;
+                    ::_exit(EXIT_BADOPTIONS);
                 }
                 cmdLine.port = CmdLine::ShardServerPort;
             }
         }
         else {
             if ( cmdLine.port <= 0 || cmdLine.port > 65535 ) {
-                out() << "bad --port number" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                std::cerr << "bad --port number" << std::endl;
+                ::_exit(EXIT_BADOPTIONS);
             }
         }
         if ( params.count("configsvr" ) ) {
@@ -1278,8 +1279,9 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
 
         if (params.count("noMoveParanoia") > 0 && params.count("moveParanoia") > 0) {
-            out() << "The moveParanoia and noMoveParanoia flags cannot both be set; please use only one of them." << endl;
-            ::_exit( EXIT_BADOPTIONS );
+            std::cerr << "The moveParanoia and noMoveParanoia flags cannot both be set; "
+                      << "please use only one of them." << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
 
         if (params.count("noMoveParanoia"))
@@ -1289,11 +1291,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             cmdLine.moveParanoia = true;
 
         if (params.count("pairwith") || params.count("arbiter") || params.count("opIdMem")) {
-            out() << "****" << endl;
-            out() << "Replica Pairs have been deprecated. Invalid options: --pairwith, --arbiter, and/or --opIdMem" << endl;
-            out() << "<http://dochub.mongodb.org/core/replicapairs>" << endl;
-            out() << "****" << endl;
-            dbexit( EXIT_BADOPTIONS );
+            std::cerr << "****\n"
+                      << "Replica Pairs have been deprecated. Invalid options: --pairwith, "
+                      << "--arbiter, and/or --opIdMem\n"
+                      << "<http://dochub.mongodb.org/core/replicapairs>\n"
+                      << "****" << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
 
         Module::configAll( params );
@@ -1323,58 +1326,57 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         Module::configAll(params);
 
 #ifdef _WIN32
-        ntservice::configureService(initService,
-                                    params,
-                                    defaultServiceStrings,
-                                    std::vector<std::string>(),
-                                    argv);
+    ntservice::configureService(initService,
+            params,
+            defaultServiceStrings,
+            std::vector<std::string>(),
+            argv);
 #endif  // _WIN32
 
 #ifdef __linux__
-        if (params.count("shutdown")){
-            bool failed = false;
+    if (params.count("shutdown")){
+        bool failed = false;
 
-            string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).string();
-            if ( !boost::filesystem::exists( name ) || boost::filesystem::file_size( name ) == 0 )
-                failed = true;
+        string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).string();
+        if ( !boost::filesystem::exists( name ) || boost::filesystem::file_size( name ) == 0 )
+            failed = true;
 
-            pid_t pid;
-            string procPath;
-            if (!failed){
-                try {
-                    ifstream f (name.c_str());
-                    f >> pid;
-                    procPath = (str::stream() << "/proc/" << pid);
-                    if (!boost::filesystem::exists(procPath))
-                        failed = true;
-                }
-                catch (const std::exception& e){
-                    cerr << "Error reading pid from lock file [" << name << "]: " << e.what() << endl;
+        pid_t pid;
+        string procPath;
+        if (!failed){
+            try {
+                ifstream f (name.c_str());
+                f >> pid;
+                procPath = (str::stream() << "/proc/" << pid);
+                if (!boost::filesystem::exists(procPath))
                     failed = true;
-                }
             }
-
-            if (failed) {
-                cerr << "There doesn't seem to be a server running with dbpath: " << dbpath << endl;
-                ::_exit(EXIT_FAILURE);
+            catch (const std::exception& e){
+                cerr << "Error reading pid from lock file [" << name << "]: " << e.what() << endl;
+                failed = true;
             }
-
-            cout << "killing process with pid: " << pid << endl;
-            int ret = kill(pid, SIGTERM);
-            if (ret) {
-                int e = errno;
-                cerr << "failed to kill process: " << errnoWithDescription(e) << endl;
-                ::_exit(EXIT_FAILURE);
-            }
-
-            while (boost::filesystem::exists(procPath)) {
-                sleepsecs(1);
-            }
-
-            ::_exit(EXIT_SUCCESS);
         }
-#endif
+
+        if (failed) {
+            cerr << "There doesn't seem to be a server running with dbpath: " << dbpath << endl;
+            ::_exit(EXIT_FAILURE);
+        }
+
+        cout << "killing process with pid: " << pid << endl;
+        int ret = kill(pid, SIGTERM);
+        if (ret) {
+            int e = errno;
+            cerr << "failed to kill process: " << errnoWithDescription(e) << endl;
+            ::_exit(EXIT_FAILURE);
+        }
+
+        while (boost::filesystem::exists(procPath)) {
+            sleepsecs(1);
+        }
+
+        ::_exit(EXIT_SUCCESS);
     }
+#endif
 }
 
 static int mongoDbMain(int argc, char* argv[], char **envp) {
@@ -1402,6 +1404,7 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     setupSignalHandlers();
 
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
+    startupConfigActions(std::vector<std::string>(argv, argv + argc));
     CmdLine::censor(argc, argv);
 
     if (!initializeServerGlobalState())

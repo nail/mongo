@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include "mongo/base/status.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/platform/process_id.h"
 #include "mongo/util/net/listen.h"
@@ -47,6 +48,11 @@ namespace boost {
 }
 
 namespace mongo {
+
+    namespace optionenvironment {
+        class OptionSection;
+        class Environment;
+    } // namespace optionenvironment
 
     /* command line options
     */
@@ -175,11 +181,9 @@ namespace mongo {
         /**
          * @return true if should run program, false if should exit
          */
-        static bool store( const std::vector<std::string>& argv,
-                           boost::program_options::options_description& visible,
-                           boost::program_options::options_description& hidden,
-                           boost::program_options::positional_options_description& positional,
-                           boost::program_options::variables_map &output );
+        static Status store( const std::vector<std::string>& argv,
+                             optionenvironment::OptionSection& options,
+                             optionenvironment::Environment& output );
 
         /**
          * Blot out sensitive fields in the argv array.
@@ -189,6 +193,11 @@ namespace mongo {
 
         static BSONArray getArgvArray();
         static BSONObj getParsedOpts();
+
+        static Status setupBinaryName(const std::vector<std::string>& argv);
+        static Status setupCwd();
+        static Status setArgvArray(const std::vector<std::string>& argv);
+        static Status setParsedOpts(optionenvironment::Environment& params);
 
         time_t started;
     };

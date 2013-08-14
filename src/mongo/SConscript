@@ -391,7 +391,9 @@ coreServerFiles = [ "db/client_basic.cpp",
                     "db/stats/service_stats.cpp",
                     ]
 
-env.StaticLibrary('ntservice', ['util/ntservice.cpp'], LIBDEPS=['foundation'])
+env.StaticLibrary('ntservice', ['util/ntservice.cpp'],
+                  LIBDEPS=['foundation',
+                           '$BUILD_DIR/mongo/util/options_parser/options_parser'])
 if windows:
     env.CppUnitTest('ntservice_test', 'util/ntservice_test.cpp',
                     LIBDEPS=['ntservice'],
@@ -516,8 +518,16 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "util/elapsed_tracker.cpp"
                   ]
 
-env.Library( "dbcmdline", "db/cmdline.cpp", LIBDEPS=['bson', 'server_parameters'] )
-env.CppUnitTest('cmdline_test', 'db/cmdline_test.cpp', LIBDEPS=['dbcmdline'])
+env.Library("dbcmdline", ["db/cmdline.cpp", "db/server_options.cpp"],
+            LIBDEPS=['bson',
+                    'server_parameters',
+                    '$BUILD_DIR/mongo/util/options_parser/options_parser',
+                    ])
+env.CppUnitTest('cmdline_test', 'db/cmdline_test.cpp',
+                LIBDEPS=['bson',
+                         'dbcmdline',
+                         '$BUILD_DIR/mongo/util/options_parser/options_parser',
+                         ])
 
 env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
 

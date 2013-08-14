@@ -36,6 +36,7 @@
 #include "mongo/s/config_upgrade.h"
 #include "mongo/s/cursors.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/mongos_options.h"
 #include "mongo/s/request.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/admin_access.h"
@@ -47,6 +48,8 @@
 #include "mongo/util/net/message_server.h"
 #include "mongo/util/net/ssl_manager.h"
 #include "mongo/util/ntservice.h"
+#include "mongo/util/options_parser/environment.h"
+#include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/signal_handlers.h"
@@ -74,6 +77,8 @@ namespace mongo {
 #endif
 
     CmdLine cmdLine;
+    moe::Environment params;
+    moe::OptionSection options("Allowed options");
     Database *database = 0;
     string mongosCommand;
     bool dbexitCalled = false;
@@ -400,20 +405,16 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 #endif
 
     // parse options
-    po::variables_map params;
-    if (!CmdLine::store(argv,
-                        visible_options,
-                        hidden_options,
-                        positional_options,
-                        params)) {
-        ::_exit(EXIT_FAILURE);
+    ret = CmdLine::store(argv, options, params);
+    if (!ret.isOK()) {
+        std::cerr << "Error parsing command line: " << ret.toString() << std::endl;
+        ::_exit(EXIT_BADOPTIONS);
     }
 
     if ( params.count( "help" ) ) {
-        cout << visible_options << endl;
+        std::cout << options.helpString() << std::endl;
         ::_exit(EXIT_SUCCESS);
     }
-
     if ( params.count( "version" ) ) {
         printShardingVersionInfo(true);
         ::_exit(EXIT_SUCCESS);
@@ -424,13 +425,13 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
         // validate chunksize before proceeding
         if ( csize == 0 ) {
-            out() << "error: need a non-zero chunksize" << endl;
-            ::_exit(EXIT_FAILURE);
+            std::cerr << "error: need a non-zero chunksize" << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
 
         if ( !Chunk::setMaxChunkSizeSizeMB( csize ) ) {
-            out() << "MaxChunkSize invalid" << endl;
-            ::_exit(EXIT_FAILURE);
+            std::cerr << "MaxChunkSize invalid" << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
     }
 
@@ -447,9 +448,9 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     }
 
     if ( params.count( "test" ) ) {
-        ::mongo::logger::globalLogDomain()->setMinimumLoggedSeverity(::mongo::logger::LogSeverity::Debug(5));
+        ::mongo::logger::globalLogDomain()->setMinimumLoggedSeverity(
+                                                        ::mongo::logger::LogSeverity::Debug(5));
         StartupTest::runTests();
-        cout << "tests passed" << endl;
         ::_exit(EXIT_SUCCESS);
     }
 
@@ -459,8 +460,8 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
     if (params.count("httpinterface")) {
         if (params.count("nohttpinterface")) {
-            out() << "can't have both --httpinterface and --nohttpinterface" << endl;
-            ::_exit(EXIT_FAILURE);
+            std::cerr << "can't have both --httpinterface and --nohttpinterface" << std::endl;
+            ::_exit(EXIT_BADOPTIONS);
         }
         httpInterface = true;
     }
@@ -476,14 +477,14 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
     }
 
     if ( ! params.count( "configdb" ) ) {
-        out() << "error: no args for --configdb" << endl;
-        ::_exit(EXIT_FAILURE);
+        std::cerr << "error: no args for --configdb" << std::endl;
+        ::_exit(EXIT_BADOPTIONS);
     }
 
     splitStringDelim( params["configdb"].as<string>() , &configdbs , ',' );
     if ( configdbs.size() != 1 && configdbs.size() != 3 ) {
-        out() << "need either 1 or 3 configdbs" << endl;
-        ::_exit(EXIT_FAILURE);
+        std::cerr << "need either 1 or 3 configdbs" << std::endl;
+        ::_exit(EXIT_BADOPTIONS);
     }
 
     if( configdbs.size() == 1 ) {
@@ -561,6 +562,7 @@ int main(int argc, char* argv[], char** envp) {
 
     processCommandLineOptions(std::vector<std::string>(argv, argv + argc));
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
+    startupConfigActions(std::vector<std::string>(argv, argv + argc));
     CmdLine::censor(argc, argv);
     try {
         int exitCode = _main();
