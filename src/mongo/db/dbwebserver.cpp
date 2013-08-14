@@ -103,7 +103,9 @@ namespace mongo {
 
         bool allowed( const char * rq , vector<string>& headers, const SockAddr &from ) {
             if ( from.isLocalHost() || !_webUsers->haveAdminUsers() ) {
-                _authorizePrincipal("RestUser", false);
+                // TODO(spencer): should the above check use "&&" not "||"?  Currently this is much
+                // more permissive than the server's localhost auth bypass.
+                cc().getAuthorizationSession()->grantInternalAuthorization();
                 return true;
             }
 
@@ -121,7 +123,9 @@ namespace mongo {
                     parms[name] = val;
                 }
 
-                BSONObj user = _webUsers->getAdminUser( parms["username"] );
+                // Only users in the admin DB are visible by the webserver
+                UserName userName(parms["username"], "admin");
+                BSONObj user = _webUsers->getAdminUser(userName);
                 if ( ! user.isEmpty() ) {
                     string ha1 = user["pwd"].str();
                     string ha2 = md5simpledigest( (string)"GET" + ":" + parms["uri"] );
@@ -141,11 +145,7 @@ namespace mongo {
                     string r1 = md5simpledigest( r.str() );
 
                     if ( r1 == parms["response"] ) {
-                        std::string principalName = user["user"].str();
-                        bool readOnly = user[ "readOnly" ].isBoolean() &&
-                                user[ "readOnly" ].boolean();
-
-                        _authorizePrincipal(principalName, readOnly);
+                        _authorizePrincipal(userName);
                         return true;
                     }
                 }
