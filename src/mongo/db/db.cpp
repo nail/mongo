@@ -1000,6 +1000,13 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             dbpath = dbpath.erase(dbpath.size()-1);
         }
 #endif
+        if ( params.count("slowms")) {
+            cmdLine.slowMS = params["slowms"].as<int>();
+        }
+
+        if ( params.count("syncdelay")) {
+            cmdLine.syncdelay = params["syncdelay"].as<double>();
+        }
 
         if (params.count("cpu")) {
             cmdLine.cpu = true;

@@ -79,12 +79,12 @@ namespace mongo {
 #endif
 
             ("username,u",po::value<string>(), "username" )
-            ("password,p", new PasswordValue( &_password ), "password" )
+            ("password,p",po::value<string>()->implicit_value(""), "password" )
             ("authenticationDatabase",
-             po::value<string>(&_authenticationDatabase)->default_value(""),
+             po::value<string>()->default_value(""),
              "user source (defaults to dbname)" )
             ("authenticationMechanism",
-             po::value<string>(&_authenticationMechanism)->default_value("MONGODB-CR"),
+             po::value<string>()->default_value("MONGODB-CR"),
              "authentication mechanism")
             ;
 
@@ -149,13 +149,20 @@ namespace mongo {
                        options(all_options).
                        positional( _positonalOptions ).
                        style(command_line_style).run() , _params );
-
-            po::notify( _params );
         }
         catch (po::error &e) {
             cerr << "ERROR: " << e.what() << endl << endl;
             printHelp(cerr);
             ::_exit(EXIT_BADOPTIONS);
+        }
+
+        // Set authentication parameters
+        if ( _params.count( "authenticationDatabase" ) ) {
+            _authenticationDatabase = _params["authenticationDatabase"].as<string>();
+        }
+
+        if ( _params.count( "authenticationMechanism" ) ) {
+            _authenticationMechanism = _params["authenticationMechanism"].as<string>();
         }
 
         // hide password from ps output
