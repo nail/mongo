@@ -602,7 +602,7 @@ namespace mongo {
                 Client::Context ctx( ns );
 
                 const NamespaceString requestNs(ns);
-                UpdateRequest request(requestNs, op.debug());
+                UpdateRequest request(requestNs);
 
                 request.setUpsert(upsert);
                 request.setMulti(multi);
@@ -610,7 +610,7 @@ namespace mongo {
                 request.setUpdates(toupdate);
                 request.setUpdateOpLog(); // TODO: This is wasteful if repl is not active.
 
-                UpdateResult res = update(request, &driver);
+                UpdateResult res = update(request, &op.debug(), &driver);
 
                 // for getlasterror
                 lastError.getSafe()->recordUpdate( res.existing , res.numMatched , res.upserted );
