@@ -28,6 +28,7 @@
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/util/bson_extract.h"
+#include "mongo/client/auth_helpers.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/sasl_client_session.h"
 #include "mongo/platform/cstdint.h"
@@ -94,7 +95,7 @@ namespace {
             if (!status.isOK())
                 return status;
 
-            *outPassword = client->createPasswordDigest(user, rawPassword);
+            *outPassword = auth::createPasswordDigest(user, rawPassword);
         }
         else {
             *outPassword = rawPassword;
