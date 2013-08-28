@@ -571,6 +571,19 @@ namespace mutablebson {
             dassert(_objects.size() == kLeafObjIdx);
             _objects.push_back(_leafBuilder.asTempObj());
             dassert(_leafBuf.len() != 0);
+        }
+
+        void reset(Document::InPlaceMode inPlaceMode) {
+            // Clear out the state in the vectors.
+            _elements.clear();
+            _objects.clear();
+            _fieldNames.clear();
+
+            // There is no way to reset the state of a BSONObjBuilder, so we need to call its
+            // dtor, reset the underlying buf, and re-invoke the constructor in-place.
+            _leafBuilder.~BSONObjBuilder();
+            _leafBuf.reset();
+            new (&_leafBuilder) BSONObjBuilder(_leafBuf);
 
             // TODO: Could use boost optional to reduce pointer chasing.
             if (inPlaceMode == Document::kInPlaceEnabled) {
