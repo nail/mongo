@@ -125,9 +125,20 @@ namespace mongo {
 
                 // Only users in the admin DB are visible by the webserver
                 UserName userName(parms["username"], "admin");
-                BSONObj user = _webUsers->getAdminUser(userName);
-                if ( ! user.isEmpty() ) {
-                    string ha1 = user["pwd"].str();
+                User* user;
+                AuthorizationManager& authzManager =
+                        cc().getAuthorizationSession()->getAuthorizationManager();
+                Status status = authzManager.acquireUser(userName, &user);
+                if (!status.isOK()) {
+                    if (status.code() != ErrorCodes::UserNotFound) {
+                        uasserted(17051, status.reason());
+                    }
+                } else {
+                    uassert(17090,
+                            "External users don't have a password",
+                            !user->getCredentials().isExternal);
+                    string ha1 = user->getCredentials().password;
+                    authzManager.releaseUser(user);
                     string ha2 = md5simpledigest( (string)"GET" + ":" + parms["uri"] );
 
                     stringstream r;
