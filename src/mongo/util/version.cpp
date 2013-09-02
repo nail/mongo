@@ -31,6 +31,7 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/file.h"
+#include "mongo/util/net/ssl_manager.h" 
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/startup_test.h"
