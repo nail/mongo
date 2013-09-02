@@ -553,6 +553,7 @@ namespace mongo {
 #else
                 errno = ENETUNREACH;
 #endif
+                handleSendError(ret, context);
             }
             else {
                 ret = _send(data, len, context);
@@ -663,6 +664,10 @@ namespace mongo {
 #else
                 errno = ENETUNREACH;
 #endif
+                if (ret <= 0) {
+                    handleRecvError(ret, len);
+                    continue;
+                }
             }
             else {
                 ret = unsafe_recv(buf, len);
