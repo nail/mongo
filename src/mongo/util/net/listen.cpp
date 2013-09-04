@@ -99,8 +99,7 @@ namespace mongo {
     }
     
     Listener::Listener(const string& name, const string &ip, int port, bool logConnect ) 
-        : _port(port), _name(name), _ip(ip), _setupSocketsSuccessful(false),
-          _logConnect(logConnect), _elapsedTime(0) {
+        : _port(port), _name(name), _ip(ip), _logConnect(logConnect), _elapsedTime(0) { 
 #ifdef MONGO_SSL
         _ssl = getSSLManager();
 #endif
@@ -158,7 +157,7 @@ namespace mongo {
                 if ( x == EADDRINUSE )
                     error() << "  addr already in use" << endl;
                 closesocket(sock);
-                return;
+                return false;
             }
 
 #if !defined(_WIN32)
@@ -173,22 +172,27 @@ namespace mongo {
             if ( ::listen(sock, 128) != 0 ) {
                 error() << "listen(): listen() failed " << errnoWithDescription() << endl;
                 closesocket(sock);
-                return;
+                return false;
             }
 
             ListeningSockets::get()->add( sock );
 
-            _socks.push_back(sock);
+            socks.push_back(sock);
         }
         
-        _setupSocketsSuccessful = true;
+        return true;
     }
     
  
 #if !defined(_WIN32)
     void Listener::initAndListen() {
-        if (!_setupSocketsSuccessful) {
-            return;
+        checkTicketNumbers();
+        vector<SOCKET> socks;
+        
+        {
+            vector<SockAddr> mine = ipToAddrs(_ip.c_str(), _port, (!cmdLine.noUnixSocket && useUnixSockets()));
+            if ( ! _setupSockets( mine , socks ) )
+                return;
         }
 
         SOCKET maxfd = 0; // needed for select()
@@ -214,7 +218,7 @@ namespace mongo {
             fd_set fds[1];
             FD_ZERO(fds);
             
-            for (vector<SOCKET>::iterator it=_socks.begin(), end=_socks.end(); it != end; ++it) {
+            for (vector<SOCKET>::iterator it=socks.begin(), end=socks.end(); it != end; ++it) {
                 FD_SET(*it, fds);
             }
 
@@ -250,7 +254,7 @@ namespace mongo {
             _elapsedTime += ret; // assume 1ms to grab connection. very rough
 #endif
 
-            for (vector<SOCKET>::iterator it=_socks.begin(), end=_socks.end(); it != end; ++it) {
+            for (vector<SOCKET>::iterator it=socks.begin(), end=socks.end(); it != end; ++it) {
                 if (! (FD_ISSET(*it, fds)))
                     continue;
                 SockAddr from;
@@ -358,8 +362,13 @@ namespace mongo {
     };
     
     void Listener::initAndListen() {
-        if (!_setupSocketsSuccessful) {
-            return;
+        checkTicketNumbers();
+        vector<SOCKET> socks;
+        
+        {
+            vector<SockAddr> mine = ipToAddrs(_ip.c_str(), _port, false);
+            if ( ! _setupSockets( mine , socks ) )
+                return;
         }
 
 #ifdef MONGO_SSL
@@ -369,11 +378,11 @@ namespace mongo {
 #endif
                 
         OwnedPointerVector<EventHolder> eventHolders;
-        boost::scoped_array<WSAEVENT> events(new WSAEVENT[_socks.size()]);
+        boost::scoped_array<WSAEVENT> events(new WSAEVENT[socks.size()]);
         
         
         // Populate events array with an event for each socket we are watching
-        for (size_t count = 0; count < _socks.size(); ++count) {
+        for (size_t count = 0; count < socks.size(); ++count) {
             EventHolder* ev(new EventHolder);
             eventHolders.mutableVector().push_back(ev);
             events[count] = ev->get();            
@@ -381,8 +390,8 @@ namespace mongo {
             
         while ( ! inShutdown() ) {
             // Turn on listening for accept-ready sockets
-            for (size_t count = 0; count < _socks.size(); ++count) {
-                int status = WSAEventSelect(_socks[count], events[count], FD_ACCEPT | FD_CLOSE);
+            for (size_t count = 0; count < socks.size(); ++count) {
+                int status = WSAEventSelect(socks[count], events[count], FD_ACCEPT | FD_CLOSE);
                 if (status == SOCKET_ERROR) {
                     const int mongo_errno = WSAGetLastError();
                     error() << "Windows WSAEventSelect returned " 
@@ -392,7 +401,7 @@ namespace mongo {
             }
         
             // Wait till one of them goes active, or we time out
-            DWORD result = WSAWaitForMultipleEvents(_socks.size(),
+            DWORD result = WSAWaitForMultipleEvents(socks.size(), 
                                                     events.get(), 
                                                     FALSE, // don't wait for all the events
                                                     10, // timeout, in ms 
@@ -414,7 +423,7 @@ namespace mongo {
             DWORD eventIndex = result - WSA_WAIT_EVENT_0;
             WSANETWORKEVENTS networkEvents;            
             // Extract event details, and clear event for next pass
-            int status = WSAEnumNetworkEvents(_socks[eventIndex],
+            int status = WSAEnumNetworkEvents(socks[eventIndex], 
                                               events[eventIndex], 
                                               &networkEvents);
             if (status == SOCKET_ERROR) {
@@ -441,7 +450,7 @@ namespace mongo {
                 continue;
             }
             
-            status = WSAEventSelect(_socks[eventIndex], NULL, 0);
+            status = WSAEventSelect(socks[eventIndex], NULL, 0);                
             if (status == SOCKET_ERROR) {
                 const int mongo_errno = WSAGetLastError();
                 error() << "Windows WSAEventSelect returned " 
@@ -449,10 +458,10 @@ namespace mongo {
                 continue;
             }
             
-            disableNonblockingMode(_socks[eventIndex]);
+            disableNonblockingMode(socks[eventIndex]);
             
             SockAddr from;
-            int s = accept(_socks[eventIndex], from.raw(), &from.addressSize);
+            int s = accept(socks[eventIndex], from.raw(), &from.addressSize);
             if ( s < 0 ) {
                 int x = errno; // so no global issues
                 if (x == EBADF) {
