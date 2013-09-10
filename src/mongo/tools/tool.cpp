@@ -198,7 +198,7 @@ namespace mongo {
 
 #ifdef MONGO_SSL
         if (_params.count("ssl")) {
-            mongo::cmdLine.sslOnNormalPorts = true;
+            sslGlobalParams.sslOnNormalPorts = true;
         }
 #endif
 

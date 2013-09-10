@@ -37,5 +37,6 @@
 #include "mongo/client/model.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/syncclusterconnection.h"
+#include "mongo/util/net/ssl_options.h"
 
 #include "mongo/client/undef_macros.h"
