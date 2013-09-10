@@ -1250,7 +1250,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
                 dbexit( EXIT_BADOPTIONS );
             }
         }
-        if (params.count("port") == 0 ) {
+        if (!params.count("port")) {
             if( params.count("configsvr") ) {
                 cmdLine.port = CmdLine::ConfigServerPort;
             }
@@ -1284,7 +1284,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             enableIPv6();
         }
 
-        if (params.count("noMoveParanoia") > 0 && params.count("moveParanoia") > 0) {
+        if (params.count("noMoveParanoia") && params.count("moveParanoia")) {
             std::cerr << "The moveParanoia and noMoveParanoia flags cannot both be set; "
                       << "please use only one of them." << std::endl;
             ::_exit(EXIT_BADOPTIONS);
