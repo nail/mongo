@@ -21,6 +21,7 @@
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/projection.h"
 #include "mongo/db/ops/query.h"
+#include "mongo/db/query/lite_parsed_query.h"
 #include "mongo/util/assert_util.h"
 
 namespace mongo {
@@ -97,26 +98,7 @@ namespace mongo {
             _filter = q;
         }
 
-        _filter = _filter.getOwned();
-
         _hasReadPref = q.hasField(Query::ReadPrefField.name());
-
-        // $maxTimeMS
-        BSONElement maxTimeMSElt = q.getField("$maxTimeMS");
-        if (!maxTimeMSElt.eoo()) {
-            uassert(16987,
-                    mongoutils::str::stream() <<
-                        "$maxTimeMS must be a number type, instead found type: " <<
-                        maxTimeMSElt.type(),
-                    maxTimeMSElt.isNumber());
-        }
-        // If $maxTimeMS was not specified, _maxTimeMS is set to 0 (special value for "allow to
-        // run indefinitely").
-        long long maxTimeMSLongLong = maxTimeMSElt.safeNumberLong();
-        uassert(16988,
-                "$maxTimeMS out of range [0,2147483647]",
-                maxTimeMSLongLong >= 0 && maxTimeMSLongLong <= INT_MAX);
-        _maxTimeMS = static_cast<int>(maxTimeMSLongLong);
     }
 
     void ParsedQuery::_reset() {
@@ -124,6 +106,7 @@ namespace mongo {
         _explain = false;
         _returnKey = false;
         _maxScan = 0;
+        _maxTimeMS = 0;
     }
 
     /* This is for languages whose "objects" are not well ordered (JSON is well ordered).
@@ -183,6 +166,17 @@ namespace mongo {
                     _returnKey = e.trueValue();
                 else if ( strcmp( "maxScan" , name ) == 0 )
                     _maxScan = e.numberInt();
+                }
+                else if ( strcmp( "showDiskLoc" , name ) == 0 ) {
+                    _showDiskLoc = e.trueValue();
+                }
+                else if ( strcmp( "maxTimeMS" , name ) == 0 ) {
+                    StatusWith<int> maxTimeMS = LiteParsedQuery::parseMaxTimeMS(e);
+                    uassert(17131,
+                            maxTimeMS.getStatus().reason(),
+                            maxTimeMS.isOK());
+                    _maxTimeMS = maxTimeMS.getValue();
+                }
                 else if ( strcmp( "comment" , name ) == 0 ) {
                     ; // no-op
                 }

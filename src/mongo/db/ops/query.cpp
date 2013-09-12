@@ -1010,7 +1010,6 @@ namespace mongo {
         curop.debug().ntoreturn = pq.getNumToReturn();
         curop.debug().query = jsobj;
         curop.setQuery(jsobj);
-        curop.setMaxTimeMicros(static_cast<unsigned long long>(pq.getMaxTimeMS()) * 1000);
 
         uassert( 16256, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
@@ -1081,13 +1080,25 @@ namespace mongo {
                            !inMultiStatementTxn);
         }
 
-        // Begin a read-only, snapshot transaction under normal circumstances.
-        // If the cursor is tailable, we need to be able to read uncommitted data.
-        const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
-        LOCK_REASON(lockReason, "query");
-        Client::ReadContext ctx(ns, lockReason);
-        scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
-                                                    new Client::Transaction(txnFlags) : NULL);
+        // Handle query option $maxTimeMS (not used with commands).
+        curop.setMaxTimeMicros(static_cast<unsigned long long>(pq.getMaxTimeMS()) * 1000);
+
+        // Run a simple id query.
+        if ( ! (explain || pq.showDiskLoc()) && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
+            if ( queryIdHack( ns, query, pq, curop, result ) ) {
+                return "";
+            }
+        }
+
+        // sanity check the query and projection
+        if ( pq.getFields() != NULL )
+            pq.getFields()->validateQuery( query );
+
+        // these now may stored in a ClientCursor or somewhere else,
+        // so make sure we use a real copy
+        jsobj = jsobj.getOwned();
+        query = query.getOwned();
+        order = order.getOwned();
 
         bool hasRetried = false;
         while ( 1 ) {

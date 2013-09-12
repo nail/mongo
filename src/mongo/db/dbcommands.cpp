@@ -2063,6 +2063,22 @@ namespace mongo {
             scp->checkPossiblyShardedMessage(dbQuery, cmdns);
         }
 
+        // Handle command option maxTimeMS.
+        StatusWith<int> maxTimeMS = LiteParsedQuery::parseMaxTimeMS(cmdObj["maxTimeMS"]);
+        if (!maxTimeMS.isOK()) {
+            appendCommandStatus(result, false, maxTimeMS.getStatus().reason());
+            return;
+        }
+        if (cmdObj.hasField("$maxTimeMS")) {
+            appendCommandStatus(result,
+                                false,
+                                "no such command option $maxTimeMS; use maxTimeMS instead");
+            return;
+        }
+
+        client.curop()->setMaxTimeMicros(static_cast<unsigned long long>(maxTimeMS.getValue())
+                                         * 1000);
+
         std::string errmsg;
         bool retval = false;
         LOCK_REASON(lockReason, "command");
@@ -2176,6 +2192,16 @@ namespace mongo {
                                          : str::equals("query", e.fieldName())))
             {
                 jsobj = e.embeddedObject();
+                if (_cmdobj.hasField("$maxTimeMS")) {
+                    Command::appendCommandStatus(anObjBuilder,
+                                                 false,
+                                                 "cannot use $maxTimeMS query option with "
+                                                    "commands; use maxTimeMS command option "
+                                                    "instead");
+                    BSONObj x = anObjBuilder.done();
+                    b.appendBuf(x.objdata(), x.objsize());
+                    return true;
+                }
             }
             else {
                 jsobj = cmdobj;
@@ -2205,7 +2231,7 @@ namespace mongo {
         }
 
         BSONObj x = anObjBuilder.done();
-        b.appendBuf((void*) x.objdata(), x.objsize());
+        b.appendBuf(x.objdata(), x.objsize());
 
         return true;
     }
