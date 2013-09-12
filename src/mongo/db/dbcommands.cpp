@@ -65,11 +65,14 @@
 #include "mongo/s/d_writeback.h"
 #include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
-#include "mongo/util/version.h"
+#include "mongo/server.h"
+#include "mongo/util/fail_point_service.h"
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
 
 namespace mongo {
+
+    extern FailPoint maxTimeAlwaysTimeOut;
 
     /* reset any errors so that getlasterror comes back clean.
 
@@ -2078,6 +2081,13 @@ namespace mongo {
 
         client.curop()->setMaxTimeMicros(static_cast<unsigned long long>(maxTimeMS.getValue())
                                          * 1000);
+        if (MONGO_FAIL_POINT(maxTimeAlwaysTimeOut) && maxTimeMS.getValue() != 0) {
+            appendCommandStatus(result, Status(ErrorCodes::ExceededTimeLimit,
+                                               "exception: operation exceeded time limit "
+                                                   "[maxTimeAlwaysTimeOut]",
+                                               0));
+            return;
+        }
 
         std::string errmsg;
         bool retval = false;
