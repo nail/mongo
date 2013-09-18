@@ -24,10 +24,7 @@
 #include <string>
 #include <fstream>
 
-#include <boost/filesystem/operations.hpp>
-
 #include "mongo/base/parse_number.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/file.h"
