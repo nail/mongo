@@ -168,7 +168,10 @@ namespace mongo {
 #endif  // !defined(_WIN32)
 
         if (!cmdLine.pidFile.empty()) {
-            writePidFile(cmdLine.pidFile);
+            if (!writePidFile(cmdLine.pidFile)) {
+                // error message logged in writePidFile
+                return false;
+            }
         }
 
         if (!cmdLine.keyFile.empty() && cmdLine.clusterAuthMode != "x509") {
