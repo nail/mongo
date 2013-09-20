@@ -19,12 +19,13 @@
 
 #pragma once
 
-#include "mongoutils/str.h"
+#include <boost/filesystem/path.hpp>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <boost/filesystem/path.hpp>
+#include "mongo/util/log.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
     
@@ -52,7 +53,7 @@ namespace mongo {
             string fullpath = f.string();
             string relative = str::after(fullpath, dbp.string());
             if( relative.empty() ) {
-                log() << "warning file is not under db path? " << fullpath << ' ' << dbp.string() << endl;
+                log() << "warning file is not under db path? " << fullpath << ' ' << dbp.string();
                 RelativePath rp;
                 rp._p = fullpath;
                 return rp;
