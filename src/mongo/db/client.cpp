@@ -473,6 +473,7 @@ namespace mongo {
         idhack = false;
         scanAndOrder = false;
         nupdated = -1;
+        nupdateNoops = -1;
         ninserted = -1;
         ndeleted = -1;
         fastmodinsert = false;
