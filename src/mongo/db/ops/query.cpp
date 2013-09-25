@@ -25,6 +25,8 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/kill_current_op.h"
+#include "mongo/db/pagefault.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/query_optimizer.h"
@@ -43,8 +45,6 @@ namespace mongo {
        a little bit more than this, it is a threshold rather than a limit.
     */
     const int32_t MaxBytesToReturnToClientAtOnce = 4 * 1024 * 1024;
-
-    extern FailPoint maxTimeAlwaysTimeOut;
 
     MONGO_FP_DECLARE(getMoreError);
 
@@ -182,10 +182,7 @@ namespace mongo {
             // If the operation that spawned this cursor had a time limit set, apply leftover
             // time to this getmore.
             curop.setMaxTimeMicros( cc->getLeftoverMaxTimeMicros() );
-            if (MONGO_FAIL_POINT(maxTimeAlwaysTimeOut) && cc->getLeftoverMaxTimeMicros() != 0) {
-                uasserted(ErrorCodes::ExceededTimeLimit,
-                          "operation exceeded time limit [maxTimeAlwaysTimeOut]");
-            }
+            killCurrentOp.checkForInterrupt(); // May trigger maxTimeAlwaysTimeOut fail point.
 
             if ( pass == 0 )
                 cc->updateSlaveLocation( curop );
@@ -1088,10 +1085,7 @@ namespace mongo {
 
         // Handle query option $maxTimeMS (not used with commands).
         curop.setMaxTimeMicros(static_cast<unsigned long long>(pq.getMaxTimeMS()) * 1000);
-        if (MONGO_FAIL_POINT(maxTimeAlwaysTimeOut) && pq.getMaxTimeMS() != 0) {
-            uasserted(ErrorCodes::ExceededTimeLimit,
-                      "operation exceeded time limit [maxTimeAlwaysTimeOut]");
-        }
+        killCurrentOp.checkForInterrupt(); // May trigger maxTimeAlwaysTimeOut fail point.
 
         // Run a simple id query.
         if ( ! (explain || pq.showDiskLoc()) && isSimpleIdQuery( query ) && !pq.hasOption( QueryOption_CursorTailable ) ) {
