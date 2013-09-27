@@ -1,8 +1,5 @@
-// #file dbtests.cpp : Runs db unit tests.
-//
-
 /**
- *    Copyright (C) 2008 10gen Inc.
+ *    Copyright (C) 2013 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -29,26 +26,11 @@
  *    then also delete it in the license file.
  */
 
-#include "mongo/pch.h"
+#pragma once
 
-#include "mongo/base/initializer.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/collection.h"
-#include "mongo/dbtests/dbtests.h"
-#include "mongo/dbtests/framework.h"
-#include "mongo/util/exception_filter_win32.h"
-#include "mongo/util/gcov.h"
-#include "mongo/util/startup_test.h"
-
-// This is kind of secret, see collection.cpp.
-void turnOnAllowSetMultiKeyInMSTForTests();
-
-int main( int argc, char** argv, char** envp ) {
-    static StaticObserver StaticObserver;
-    setWindowsUnhandledExceptionFilter();
-    Command::testCommandsEnabled = 1;
-    CollectionBase::turnOnAllowSetMultiKeyInMSTForTests();
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    StartupTest::runTests();
-    _exit(mongo::dbtests::runDbTests( argc, argv, "/tmp/unittest" ));
-}
+#ifdef MONGO_GCOV
+extern "C" { void __gcov_flush(); }
+inline void flushForGcov() { __gcov_flush(); }
+#else
+inline void flushForGcov() {}
+#endif

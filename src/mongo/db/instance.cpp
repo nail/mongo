@@ -1236,6 +1236,8 @@ namespace mongo {
     /* not using log() herein in case we are already locked */
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
 
+        flushForGcov();
+
         Client * c = currentClient.get();
         {
             scoped_lock lk( exitMutex );
