@@ -912,7 +912,7 @@ namespace mongo {
 
 #ifdef MONGO_SSL
         if ( cmdLine.sslOnNormalPorts ) {
-            p->secure( sslManager() );
+            return p->secure( sslManager() );
         }
 #endif
 
