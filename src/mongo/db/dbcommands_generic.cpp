@@ -47,6 +47,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/log_process_details.h"
 #include "mongo/db/repl/multicmd.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/s/shard.h"
@@ -157,6 +158,26 @@ namespace mongo {
         }
 
     } hostInfoCmd;
+
+    class LogRotateCmd : public InformationCommand {
+    public:
+        LogRotateCmd() : Command( "logRotate" ) {}
+        virtual bool adminOnly() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::logRotate);
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
+        }
+        virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            bool didRotate = rotateLogs();
+            if (didRotate)
+                logProcessDetailsForLogRotate();
+            return didRotate;
+        }
+
+    } logRotateCmd;
 
     class ListCommandsCmd : public InformationCommand {
     public:

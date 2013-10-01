@@ -26,6 +26,7 @@
 #include "mongo/base/initializer.h"
 #include "mongo/db/initialize_server_global_state.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/log_process_details.h"
 #include "mongo/platform/process_id.h"
 #include "mongo/plugins/loader.h"
 #include "mongo/s/balance.h"
@@ -191,6 +192,7 @@ namespace mongo {
             case SIGUSR1:
                 // log rotate signal
                 fassert(17026, rotateLogs());
+                logProcessDetailsForLogRotate();
                 break;
             default:
                 // no one else should be here
@@ -276,10 +278,7 @@ namespace mongo {
             log() << "TokuMX mongos router v" << fullVersionString() << " starting: pid=" << ProcessId::getCurrent() << " port=" << cmdLine.port <<
                     ( sizeof( int* ) == 4 ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << " (--help for usage)" << endl;
             DEV log() << "_DEBUG build" << endl;
-            printGitVersion();
-            printTokukvVersion();
-            printSysInfo();
-            printCommandLineOpts();
+            logProcessDetails();
         }
     }
 
