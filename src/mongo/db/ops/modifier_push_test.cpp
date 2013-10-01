@@ -73,7 +73,7 @@ namespace {
         bool removeFromFront = (slice < 0);
 
         // if abs(slice) is larger than the size, nothing to do.
-        if (abs(slice) >= combined->size())
+        if (abs(slice) >= int32_t(combined->size()))
             return;
 
         if (removeFromFront) {
@@ -132,7 +132,7 @@ namespace {
         bool removeFromFront = (slice < 0);
 
         // if abs(slice) is larger than the size, nothing to do.
-        if (abs(slice) >= combined->size())
+        if (abs(slice) >= int32_t(combined->size()))
             return;
 
         if (removeFromFront) {
