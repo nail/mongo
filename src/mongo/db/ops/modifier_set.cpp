@@ -21,9 +21,11 @@
 #include "mongo/db/ops/field_checker.h"
 #include "mongo/db/ops/log_builder.h"
 #include "mongo/db/ops/path_support.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
+    namespace str = mongoutils::str;
 
     struct ModifierSet::PreparedState {
 
@@ -86,7 +88,9 @@ namespace mongo {
         size_t foundCount;
         bool foundDollar = fieldchecker::isPositional(_fieldRef, &_posDollar, &foundCount);
         if (foundDollar && foundCount > 1) {
-            return Status(ErrorCodes::BadValue, "too many positional($) elements found.");
+            return Status(ErrorCodes::BadValue,
+                          str::stream() << "Too many positional (i.e. '$') elements found in path '"
+                                        << _fieldRef.dottedField() << "'");
         }
 
         //
@@ -101,8 +105,10 @@ namespace mongo {
 
         case Object:
         case Array:
-            if (opts.enforceOkForStorage && !modExpr.Obj().okForStorage()) {
-                return Status(ErrorCodes::BadValue, "cannot use '$' as values");
+            if (opts.enforceOkForStorage) {
+                Status s = modExpr.Obj().storageValidEmbedded();
+                if (!s.isOK())
+                    return s;
             }
             break;
 

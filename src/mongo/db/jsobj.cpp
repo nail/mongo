@@ -890,11 +890,20 @@ namespace mongo {
                     ;
             }
 
-            // check no regexp for _id (SERVER-9502)
-            if (mongoutils::str::equals(e.fieldName(), "_id")) {
-                if (e.type() == RegEx) {
-                    return false;
-                }
+            // Do not allow "." in the field name
+            if (strchr(name, '.')) {
+                return Status(ErrorCodes::DottedFieldName,
+                              str::stream() << name << " is not valid for storage.");
+            }
+
+            // (SERVER-9502) Do not allow storing an _id field with a RegEx type or
+            // Array type in a root document
+            if (root && (e.type() == RegEx || e.type() == Array || e.type() == Undefined)
+                     && str::equals(name,"_id")) {
+                return Status(ErrorCodes::InvalidIdField,
+                              str::stream() << name
+                                            << " is not valid for storage because it is of type "
+                                            << typeName(e.type()));
             }
 
             if ( e.mayEncapsulate() ) {

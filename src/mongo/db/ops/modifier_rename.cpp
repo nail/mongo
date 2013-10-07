@@ -18,6 +18,7 @@
 
 #include "mongo/base/error_codes.h"
 #include "mongo/bson/mutable/document.h"
+#include "mongo/bson/mutable/algorithm.h"
 #include "mongo/db/ops/field_checker.h"
 #include "mongo/db/ops/log_builder.h"
 #include "mongo/db/ops/path_support.h"
@@ -25,7 +26,7 @@
 
 namespace mongo {
 
-    using mongoutils::str::stream;
+    namespace str = mongoutils::str;
 
     struct ModifierRename::PreparedState {
 
@@ -65,7 +66,9 @@ namespace mongo {
     Status ModifierRename::init(const BSONElement& modExpr, const Options& opts) {
 
         if (modExpr.type() != String) {
-            return Status(ErrorCodes::BadValue, "rename 'to' field must be a string");
+            return Status(ErrorCodes::BadValue,
+                          str::stream() << "The 'to' field for $rename must be a string: "
+                                        << modExpr);
         }
 
         // Extract the field names from the mod expression
@@ -85,13 +88,17 @@ namespace mongo {
         // TODO: Remove this restriction and make a noOp to lift restriction
         // Old restriction is that if the fields are the same then it is not allowed.
         if (_fromFieldRef == _toFieldRef)
-            return Status(ErrorCodes::BadValue, "$rename source must differ from target");
+            return Status(ErrorCodes::BadValue,
+                          str::stream() << "The source and target field for $rename must differ: "
+                                        << modExpr);
 
         // TODO: Remove this restriction by allowing moving deeping from the 'from' path
         // Old restriction is that if the to/from is on the same path it fails
         if (_fromFieldRef.isPrefixOf(_toFieldRef) || _toFieldRef.isPrefixOf(_fromFieldRef)){
             return Status(ErrorCodes::BadValue,
-                          "$rename source/destination cannot be on the same path");
+                          str::stream() << "The source and target field for $rename must "
+                                           "not be on the same path: "
+                                        << modExpr);
         }
         // TODO: We can remove this restriction as long as there is only one,
         //       or it is the same array -- should think on this a bit.
@@ -99,9 +106,13 @@ namespace mongo {
         // If a $-positional operator was used it is an error
         size_t dummyPos;
         if (fieldchecker::isPositional(_fromFieldRef, &dummyPos))
-            return Status(ErrorCodes::BadValue, "$rename source may not be dynamic array");
+            return Status(ErrorCodes::BadValue,
+                          str::stream() << "The source field for $rename may not be dynamic: "
+                                        << _fromFieldRef.dottedField());
         else if (fieldchecker::isPositional(_toFieldRef, &dummyPos))
-            return Status(ErrorCodes::BadValue, "$rename target may not be dynamic array");
+            return Status(ErrorCodes::BadValue,
+                          str::stream() << "The destination field for $rename may not be dynamic: "
+                                        << _toFieldRef.dottedField());
 
         return Status::OK();
     }
@@ -138,7 +149,11 @@ namespace mongo {
         mutablebson::Element curr = _preparedState->fromElemFound.parent();
         while (curr.ok()) {
             if (curr.getType() == Array)
-                return Status(ErrorCodes::BadValue, "source field cannot come from an array");
+                return Status(ErrorCodes::BadValue,
+                              str::stream() << "The source field cannot be an array element, '"
+                              << _fromFieldRef.dottedField() << "' in doc with "
+                              << findElementNamed(root.leftChild(), "_id").toString()
+                              << " has an array field called '" << curr.getFieldName() << "'");
             curr = curr.parent();
         }
 
@@ -167,7 +182,10 @@ namespace mongo {
         while (curr.ok()) {
             if (curr.getType() == Array)
                 return Status(ErrorCodes::BadValue,
-                              "destination field cannot have an array ancestor");
+                              str::stream() << "The destination field cannot be an array element, '"
+                              << _fromFieldRef.dottedField() << "' in doc with "
+                              << findElementNamed(root.leftChild(), "_id").toString()
+                              << " has an array field called '" << curr.getFieldName() << "'");
             curr = curr.parent();
         }
 
