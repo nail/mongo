@@ -907,7 +907,9 @@ namespace mongo {
         }
 
 #ifdef MONGO_SSL
-        if (sslGlobalParams.sslOnNormalPorts) {
+        int sslModeVal = sslGlobalParams.sslMode.load();
+        if (sslModeVal == SSLGlobalParams::SSLMode_sendAcceptSSL ||
+            sslModeVal == SSLGlobalParams::SSLMode_sslOnly) {
             return p->secure( sslManager() );
         }
 #endif
