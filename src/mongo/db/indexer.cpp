@@ -127,6 +127,11 @@ namespace mongo {
 
     void CollectionBase::HotIndexer::build() {
         if (_indexer.get() != NULL) {
+            audit::logCreateIndex(&cc(),
+                                  &_info,
+                                  _info["name"].Stringdata(),
+                                  NamespaceString(_info["ns"]).db);
+
             const int r = _indexer->build();
             if (r != 0) {
                 storage::handle_ydb_error(r);

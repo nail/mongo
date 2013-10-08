@@ -22,12 +22,20 @@
 #pragma once
 
 #include "mongo/base/error_codes.h"
+#include "mongo/db/auth/privilege.h"
 
 namespace mongo {
 
     class BSONObj;
     class ClientBasic;
     class NamespaceString;
+    class ReplSetConfig;
+    class StringData;
+    class UserName;
+
+namespace mutablebson {
+    class Document;
+}  // namespace mutablebson
 
 namespace audit {
 
@@ -127,5 +135,68 @@ namespace audit {
             bool isMulti,
             ErrorCodes::Error result);
 
+    /**
+     * Logs the result of a replSet(Re)config command.
+     */
+    void logReplSetReconfig(ClientBasic* client,
+                            const BSONObj* oldConfig,
+                            const BSONObj* newConfig);
+
+    /**
+     * Logs the result of an ApplicationMessage command.
+     */
+    void logApplicationMessage(ClientBasic* client,
+                               const StringData& msg);
+
+    /**
+     * Logs the result of a shutdown command.
+     */
+    void logShutdown(ClientBasic* client);
+
+    /**
+     * Logs the result of an AuditLogRotate command.
+     */
+    void logAuditLogRotate(ClientBasic* client,
+                           const StringData& file);
+
+    /**
+     * Logs the result of a createIndex command.
+     */
+    void logCreateIndex(ClientBasic* client,
+                        const BSONObj* indexSpec,
+                        const StringData& indexname,
+                        const StringData& dbname);
+
+    /**
+     * Logs the result of a createCollection command.
+     */
+    void logCreateCollection(ClientBasic* client,
+                             const StringData& dbname);
+
+    /**
+     * Logs the result of a createDatabase command.
+     */
+    void logCreateDatabase(ClientBasic* client,
+                           const StringData& dbname);
+
+
+    /**
+     * Logs the result of a dropIndex command.
+     */
+    void logDropIndex(ClientBasic* client,
+                      const StringData& indexname,
+                      const StringData& dbname);
+
+    /**
+     * Logs the result of a dropCollection command.
+     */
+    void logDropCollection(ClientBasic* client,
+                           const StringData& dbname);
+
+    /**
+     * Logs the result of a dropDatabase command.
+     */
+    void logDropDatabase(ClientBasic* client,
+                         const StringData& dbname);
 }  // namespace audit
 }  // namespace mongo

@@ -1268,6 +1268,7 @@ namespace mongo {
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
 
         Client * c = currentClient.get();
+        audit::logShutdown(c);
         {
             scoped_lock lk( exitMutex );
             if ( numExitCalls++ > 0 ) {

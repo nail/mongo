@@ -20,6 +20,7 @@
 
 #include "mongo/base/owned_pointer_vector.h"
 #include "mongo/base/status.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
@@ -972,6 +973,14 @@ namespace mongo {
             log() << "stopped replication because we have a new config" << endl;
             // going into this function, we know there is no replication running
             RSBase::lock lk(this);
+
+            BSONObj oldConfForAudit = config().asBson();
+            BSONObj newConfForAudit = newConfig.asBson();
+            audit::logReplSetReconfig(ClientBasic::getCurrent(),
+                                      &oldConfForAudit,
+                                      &newConfForAudit);
+
+
             // if we are fatal, we will just fall into the catch block below
             massert(16803, "we are fatal, cannot create a new config", !state().fatal());
             if (initFromConfig(newConfig, true)) {
