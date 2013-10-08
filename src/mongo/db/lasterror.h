@@ -18,17 +18,24 @@
 
 #pragma once
 
+#include <boost/thread/tss.hpp>
+#include <string>
+
+#include "mongo/db/jsobj.h"
 #include "mongo/bson/oid.h"
 
 namespace mongo {
     class BSONObjBuilder;
     class Message;
 
+    static const char kUpsertedFieldName[] = "upserted";
+
     struct LastError {
         int code;
         string msg;
         enum UpdatedExistingType { NotUpdate, True, False } updatedExisting;
-        OID upsertedId;
+        // _id field value from inserted doc, returned as kUpsertedFieldName (above)
+        BSONObj upsertedId;
         OID writebackId; // this shouldn't get reset so that old GLE are handled
         int writebackSince;
         long long nObjects;
@@ -45,11 +52,11 @@ namespace mongo {
             code = _code;
             msg = _msg;
         }
-        void recordUpdate( bool _updateObjects , long long _nObjects , OID _upsertedId ) {
+        void recordUpdate( bool _updateObjects , long long _nObjects , BSONObj _upsertedId ) {
             reset( true );
             nObjects = _nObjects;
             updatedExisting = _updateObjects ? True : False;
-            if ( _upsertedId.isSet() )
+            if ( _upsertedId.valid() && _upsertedId.hasField(kUpsertedFieldName) )
                 upsertedId = _upsertedId;
 
         }
@@ -70,7 +77,7 @@ namespace mongo {
             writebackSince++;
             valid = _valid;
             disabled = false;
-            upsertedId.clear();
+            upsertedId = BSONObj();
         }
 
         /**

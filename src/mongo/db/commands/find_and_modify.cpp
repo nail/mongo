@@ -142,7 +142,7 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            const bool found = Collection::findOne(ns, queryOriginal, doc);
+            bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -227,15 +227,21 @@ namespace mongo {
 
                     UpdateResult res = mongo::update(request, &cc().curop()->debug());
 
+                    LOG(3) << "update result: "  << res ;
                     if ( returnNew ) {
-                        if ( res.upserted.isSet() ) {
-                            queryModified = BSON( "_id" << res.upserted );
+                        if ( !res.upserted.isEmpty() ) {
+                            BSONElement upsertedElem = res.upserted[kUpsertedFieldName];
+                            LOG(3) << "using new _id to get new doc: "
+                                   << upsertedElem;
+                            queryModified = upsertedElem.wrap("_id");
                         }
                         else if ( queryModified["_id"].type() ) {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        if (!Collection::findOne(ns, queryModified, doc)) {
+
+                        LOG(3) << "using modified query to return the new doc: " << queryModified;
+                        if ( ! Helpers::findOne( ns.c_str() , queryModified , doc ) ) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 
                                                    << " queryModified: " << queryModified 
@@ -249,8 +255,9 @@ namespace mongo {
                     BSONObjBuilder le( result.subobjStart( "lastErrorObject" ) );
                     le.appendBool( "updatedExisting" , res.existing );
                     le.appendNumber( "n" , res.numMatched );
-                    if ( res.upserted.isSet() )
-                        le.append( "upserted" , res.upserted );
+                    if ( !res.upserted.isEmpty() ) {
+                        le.append( res.upserted[kUpsertedFieldName] );
+                    }
                     le.done();
                 }
             }
@@ -319,11 +326,14 @@ namespace mongo {
                 }
 
                 if (cmdObj["new"].trueValue()) {
-                    BSONElement _id = gle["upserted"];
-                    if (_id.eoo())
-                        _id = origQuery["_id"];
+                    BSONObjBuilder bob;
+                    BSONElement _id = gle[kUpsertedFieldName];
+                    if (!_id.eoo())
+                        bob.appendAs(_id, "_id");
+                    else
+                        bob.appendAs(origQuery["_id"], "_id");
 
-                    out = db.findOne(ns, QUERY("_id" << _id), fields);
+                    out = db.findOne(ns, bob.done(), fields);
                 }
 
             }
