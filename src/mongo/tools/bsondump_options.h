@@ -1,5 +1,5 @@
 /*
- *    Copyright (C) 2013 10gen Inc.
+ *    Copyright (C) 2010 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -16,20 +16,28 @@
 
 #pragma once
 
+#include <iosfwd>
+#include <string>
+#include <vector>
+
 #include "mongo/base/status.h"
+#include "mongo/tools/tool_options.h"
 
 namespace mongo {
 
-    namespace optionenvironment {
-        class OptionSection;
-        class Environment;
-    } // namespace optionenvironment
+    struct BSONDumpGlobalParams {
+        std::string type;
+        std::string file;
+    };
 
-    namespace moe = mongo::optionenvironment;
+    extern BSONDumpGlobalParams bsonDumpGlobalParams;
 
-    Status addGeneralServerOptions(moe::OptionSection* options);
+    Status addBSONDumpOptions(moe::OptionSection* options);
 
-    Status addWindowsServerOptions(moe::OptionSection* options);
+    void printBSONDumpHelp(std::ostream* out);
 
-    Status addSSLServerOptions(moe::OptionSection* options);
+    Status handlePreValidationBSONDumpOptions(const moe::Environment& params);
+
+    Status storeBSONDumpOptions(const moe::Environment& params,
+                                const std::vector<std::string>& args);
 }

@@ -1,5 +1,5 @@
 /*
- *    Copyright (C) 2013 10gen Inc.
+ *    Copyright (C) 2010 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -16,20 +16,29 @@
 
 #pragma once
 
+#include <iosfwd>
+#include <string>
+#include <vector>
+
 #include "mongo/base/status.h"
+#include "mongo/tools/tool_options.h"
 
 namespace mongo {
 
-    namespace optionenvironment {
-        class OptionSection;
-        class Environment;
-    } // namespace optionenvironment
+    struct MongoOplogGlobalParams {
+        int seconds;
+        std::string from;
+        std::string ns;
+    };
 
-    namespace moe = mongo::optionenvironment;
+    extern MongoOplogGlobalParams mongoOplogGlobalParams;
 
-    Status addGeneralServerOptions(moe::OptionSection* options);
+    Status addMongoOplogOptions(moe::OptionSection* options);
 
-    Status addWindowsServerOptions(moe::OptionSection* options);
+    void printMongoOplogHelp(std::ostream* out);
 
-    Status addSSLServerOptions(moe::OptionSection* options);
+    Status handlePreValidationMongoOplogOptions(const moe::Environment& params);
+
+    Status storeMongoOplogOptions(const moe::Environment& params,
+                                  const std::vector<std::string>& args);
 }

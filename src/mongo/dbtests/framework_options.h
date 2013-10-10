@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "mongo/base/status.h"
 
 namespace mongo {
@@ -27,9 +30,24 @@ namespace mongo {
 
     namespace moe = mongo::optionenvironment;
 
-    Status addGeneralServerOptions(moe::OptionSection* options);
+    struct FrameworkGlobalParams {
+        unsigned perfHist;
+        unsigned long long seed;
+        int runsPerTest;
+        std::string dbpathSpec;
+        std::vector<std::string> suites;
+        std::string filter;
+    };
 
-    Status addWindowsServerOptions(moe::OptionSection* options);
+    extern FrameworkGlobalParams frameworkGlobalParams;
 
-    Status addSSLServerOptions(moe::OptionSection* options);
+    Status addTestFrameworkOptions(moe::OptionSection* options);
+
+    std::string getTestFrameworkHelp(const StringData& name, const moe::OptionSection& options);
+
+    Status preValidationTestFrameworkOptions(const moe::Environment& params,
+                                             const std::vector<std::string>& args);
+
+    Status storeTestFrameworkOptions(const moe::Environment& params,
+                                     const std::vector<std::string>& args);
 }
