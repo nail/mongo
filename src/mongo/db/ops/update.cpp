@@ -35,7 +35,8 @@
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_runner.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/record.h"
+#include "mongo/db/storage/record.h"
+#include "mongo/db/structure/collection.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/platform/unordered_set.h"
 
@@ -111,14 +112,13 @@ namespace mongo {
 
         validateUpdate( nsString.ns().c_str(), request.getUpdates(), request.getQuery() );
 
-        NamespaceDetails* nsDetails = nsdetails( nsString.ns() );
-        NamespaceDetailsTransient* nsDetailsTransient =
-            &NamespaceDetailsTransient::get( nsString.ns().c_str() );
+        Collection* collection = cc().database()->getCollection( nsString.ns() );
 
         // TODO: This seems a bit circuitious.
         opDebug->updateobj = request.getUpdates();
 
-        driver->refreshIndexKeys( nsDetailsTransient->indexKeys() );
+        if ( collection )
+            driver->refreshIndexKeys( collection->infoCache()->indexKeys() );
 
         shared_ptr<Cursor> cursor = getOptimizedCursor(
             nsString.ns(), request.getQuery(), BSONObj(), request.getQueryPlanSelectionPolicy() );
@@ -222,13 +222,12 @@ namespace mongo {
                     // our namespace may have changed while we were yielded, so we re-acquire
                     // them here. If we can't do so, escape the update loop. Otherwise, refresh
                     // the driver so that it knows about what is currently indexed.
-                    nsDetails = nsdetails( nsString.ns() );
-                    if ( !nsDetails )
+                    Collection* collection = cc().database()->getCollection( nsString.ns() );
+                    if ( !collection )
                         break;
-                    nsDetailsTransient = &NamespaceDetailsTransient::get( nsString.ns().c_str() );
 
                     // TODO: This copies the index keys, but it may not need to do so.
-                    driver->refreshIndexKeys( nsDetailsTransient->indexKeys() );
+                    driver->refreshIndexKeys( collection->infoCache()->indexKeys() );
                 }
 
             }
@@ -340,7 +339,7 @@ namespace mongo {
                 // If a set of modifiers were all no-ops, we are still 'in place', but there is
                 // no work to do, in which case we want to consider the object unchanged.
                 if (!damages.empty() ) {
-                    nsDetails->paddingFits();
+                    collection->details()->paddingFits();
 
                     // All updates were in place. Apply them via durability and writing pointer.
                     mutablebson::DamageVector::const_iterator where = damages.begin();
@@ -362,8 +361,7 @@ namespace mongo {
                 // The updates were not in place. Apply them through the file manager.
                 newObj = doc.getObject();
                 DiskLoc newLoc = theDataFileMgr.updateRecord(nsString.ns().c_str(),
-                                                             nsDetails,
-                                                             nsDetailsTransient,
+                                                             collection,
                                                              record,
                                                              loc,
                                                              newObj.objdata(),

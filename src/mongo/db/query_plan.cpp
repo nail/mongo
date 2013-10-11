@@ -22,6 +22,7 @@
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/structure/collection.h"
 #include "mongo/server.h"
 
 namespace mongo {
@@ -302,16 +303,14 @@ doneCheckOrder:
             return;
         }
 
-        Collection *cl = getCollection(ns());
-        if (cl != NULL) {
-            QueryCache &qc = cl->getQueryCache();
-            QueryCache::Lock::Exclusive lk(qc);
-            QueryPattern queryPattern = _frs.pattern( _order );
-            CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
-            qc.registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
-        }
+        QueryPattern queryPattern = _frs.pattern( _order );
+        CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
+
+        Collection* collection = cc().database()->getCollection( ns() );
+        verify( collection );
+        collection->infoCache()->registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
     }
-    
+
     void QueryPlan::checkTableScanAllowed() const {
         if ( likely( !cmdLine.noTableScan ) )
             return;

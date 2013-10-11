@@ -21,6 +21,9 @@
 #include "mongo/pch.h"
 #include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/storage/namespace.h"
+#include "mongo/db/structure/collection.h"
+#include "mongo/dbtests/dbtests.h"
 
 #include "mongo/dbtests/dbtests.h"
 
@@ -40,13 +43,10 @@ namespace NamespaceTests {
             virtual ~Base() {
             }
         protected:
-            void create() {
-                _idx.reset(new IndexDetailsBase(info()));
-            }
-            virtual bool isSparse() const {
-                return false;
-            }
-            BSONObj info() const {
+            void create( bool sparse = false ) {
+                Collection* collection = _context.db()->getCollection( ns() );
+                if ( collection )
+                    collection->infoCache()->reset();
                 BSONObjBuilder builder;
                 builder.append( "ns", ns() );
                 builder.append( "name", "testIndex" );
@@ -990,12 +990,18 @@ namespace NamespaceTests {
             const char *ns() const {
                 return ns_;
             }
-            Collection *nsd() {
-                if (getCollection(ns()) == NULL) {
-                    create();
-                }
-                return getCollection( ns() );
+            NamespaceDetails *nsd() const {
+                return nsdetails( ns() )->writingWithExtra();
             }
+            Collection* collection() const {
+                Collection* c =  _context.db()->getCollection( ns() );
+                verify(c);
+                return c;
+            }
+            CollectionInfoCache* infoCache() const {
+                return collection()->infoCache();
+            }
+
             static BSONObj bigObj(bool bGenID=false) {
                 BSONObjBuilder b;
 				if (bGenID)
@@ -1035,12 +1041,11 @@ namespace NamespaceTests {
         protected:
             void assertCachedIndexKey( const BSONObj &indexKey ) {
                 ASSERT_EQUALS( indexKey,
-                              nsd()->getQueryCache().cachedQueryPlanForPattern( _pattern ).indexKey() );
+                               infoCache()->cachedQueryPlanForPattern( _pattern ).indexKey() );
             }
             void registerIndexKey( const BSONObj &indexKey ) {
-                nsd()->getQueryCache().registerCachedQueryPlanForPattern
-                        ( _pattern,
-                         CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );                
+                infoCache()->registerCachedQueryPlanForPattern( _pattern,
+                                                                CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );
             }
             FieldRangeSet _fieldRangeSet;
             QueryPattern _pattern;
@@ -1075,6 +1080,44 @@ namespace NamespaceTests {
             }
         };
 
+        class SwapIndexEntriesTest : public Base {
+        public:
+            void run() {
+                create();
+                NamespaceDetails *nsd = nsdetails(ns());
+
+                // Set 2 & 54 as multikey
+                nsd->setIndexIsMultikey(ns(), 2, true);
+                nsd->setIndexIsMultikey(ns(), 54, true);
+                ASSERT(nsd->isMultikey(2));
+                ASSERT(nsd->isMultikey(54));
+
+                // Flip 2 & 47
+                nsd->setIndexIsMultikey(ns(), 2, false);
+                nsd->setIndexIsMultikey(ns(), 47, true);
+                ASSERT(!nsd->isMultikey(2));
+                ASSERT(nsd->isMultikey(47));
+
+                // Reset entries that are already true
+                nsd->setIndexIsMultikey(ns(), 54, true);
+                nsd->setIndexIsMultikey(ns(), 47, true);
+                ASSERT(nsd->isMultikey(54));
+                ASSERT(nsd->isMultikey(47));
+
+                // Two non-multi-key
+                nsd->setIndexIsMultikey(ns(), 2, false);
+                nsd->setIndexIsMultikey(ns(), 43, false);
+                ASSERT(!nsd->isMultikey(2));
+                ASSERT(nsd->isMultikey(54));
+                ASSERT(nsd->isMultikey(47));
+                ASSERT(!nsd->isMultikey(43));
+            }
+        };
+
+    } // namespace NamespaceDetailsTests
+
+    namespace CollectionInfoCacheTests {
+
         /** clearQueryCache() clears the query plan cache. */
         class ClearQueryCache : public CollectionTests::CachedPlanBase {
         public:
@@ -1082,14 +1125,14 @@ namespace NamespaceTests {
                 // Register a query plan in the query plan cache.
                 registerIndexKey( BSON( "a" << 1 ) );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
-                
+
                 // The query plan is cleared.
-                nsd()->getQueryCache().clearQueryCache();
+                infoCache()->clearQueryCache();
                 assertCachedIndexKey( BSONObj() );
             }
-        };                                                                                         
-        
-    } // namespace CollectionTests
+        };
+
+    } // namespace CollectionInfoCacheTests
 
     class All : public Suite {
     public:
@@ -1132,11 +1175,82 @@ namespace NamespaceTests {
             add< IndexDetailsTests::MissingField >();
             add< IndexDetailsTests::SubobjectMissing >();
             add< IndexDetailsTests::CompoundMissing >();
-            add< IndexDetailsTests::Suitability >();
-            add< IndexDetailsTests::NumericFieldSuitability >();
-            add< IndexDetailsTests::IndexMissingField >();
-            add< CollectionTests::SetIndexIsMultikey >();
-            add< CollectionTests::ClearQueryCache >();
+            add< IndexSpecSuitability::IndexedQueryField >();
+            add< IndexSpecSuitability::NoIndexedQueryField >();
+            add< IndexSpecSuitability::ChildOfIndexQueryField >();
+            add< IndexSpecSuitability::ParentOfIndexQueryField >();
+            add< IndexSpecSuitability::ObjectMatchCompletingIndexField >();
+            add< IndexSpecSuitability::NoIndexedQueryField >();
+            add< IndexSpecSuitability::IndexedOrderField >();
+            add< IndexSpecSuitability::IndexedReverseOrderField >();
+            add< IndexSpecSuitability::NonPrefixIndexedOrderField >();
+            add< IndexSpecSuitability::NoIndexedOrderField >();
+            add< IndexSpecSuitability::ChildOfIndexOrderField >();
+            add< IndexSpecSuitability::ParentOfIndexOrderField >();
+            add< IndexSpecSuitability::NumericFieldSuitability >();
+            add< IndexSpecSuitability::TwoD::Within >();
+            add< IndexSpecSuitability::TwoD::WithinUnindexed >();
+            add< IndexSpecSuitability::TwoD::Near >();
+            add< IndexSpecSuitability::TwoD::LocationObject >();
+            add< IndexSpecSuitability::TwoD::PredicateObject >();
+            add< IndexSpecSuitability::TwoD::Array >();
+            add< IndexSpecSuitability::TwoD::Number >();
+            add< IndexSpecSuitability::TwoD::Missing >();
+            add< IndexSpecSuitability::TwoD::InsideAnd >();
+            add< IndexSpecSuitability::TwoD::OutsideOr >();
+            add< IndexSpecSuitability::S2::GeoIntersects >();
+            add< IndexSpecSuitability::S2::GeoIntersectsUnindexed >();
+            add< IndexSpecSuitability::S2::Near >();
+            add< IndexSpecSuitability::S2::LocationObject >();
+            add< IndexSpecSuitability::S2::PredicateObject >();
+            add< IndexSpecSuitability::S2::Array >();
+            add< IndexSpecSuitability::S2::Number >();
+            add< IndexSpecSuitability::S2::Missing >();
+            add< IndexSpecSuitability::S2::InsideAnd >();
+            add< IndexSpecSuitability::S2::OutsideOr >();
+            add< IndexSpecSuitability::Hashed::Equality >();
+            add< IndexSpecSuitability::Hashed::GreaterThan >();
+            add< IndexSpecSuitability::Hashed::InSet >();
+            add< IndexSpecSuitability::Hashed::AndEqualitySingleton >();
+            add< IndexSpecSuitability::Hashed::AndEqualityNonSingleton >();
+            add< IndexSpecSuitability::Hashed::EqualityInsideSingletonOr >();
+            add< IndexSpecSuitability::Hashed::EqualityInsideNonStandaloneSingletonOr >();
+            add< IndexSpecSuitability::Hashed::EqualityInsideNonSingletonOr >();
+            add< IndexSpecSuitability::Hashed::EqualityOutsideOr >();
+            add< NamespaceDetailsTests::Create >();
+            add< NamespaceDetailsTests::SingleAlloc >();
+            add< NamespaceDetailsTests::Realloc >();
+            add< NamespaceDetailsTests::QuantizeMinMaxBound >();
+            add< NamespaceDetailsTests::QuantizeFixedBuckets >();
+            add< NamespaceDetailsTests::QuantizeRecordBoundary >();
+            add< NamespaceDetailsTests::QuantizePowerOf2ToBucketSize >();
+            add< NamespaceDetailsTests::QuantizeLargePowerOf2ToMegabyteBoundary >();
+            add< NamespaceDetailsTests::GetRecordAllocationSizeNoPadding >();
+            add< NamespaceDetailsTests::GetRecordAllocationSizeWithPadding >();
+            add< NamespaceDetailsTests::GetRecordAllocationSizePowerOf2 >();
+            add< NamespaceDetailsTests::GetRecordAllocationSizePowerOf2PaddingIgnored >();
+            add< NamespaceDetailsTests::AllocQuantized >();
+            add< NamespaceDetailsTests::AllocCappedNotQuantized >();
+            add< NamespaceDetailsTests::AllocIndexNamespaceNotQuantized >();
+            add< NamespaceDetailsTests::AllocIndexNamespaceSlightlyQuantized >();
+            add< NamespaceDetailsTests::AllocUseNonQuantizedDeletedRecord >();
+            add< NamespaceDetailsTests::AllocExactSizeNonQuantizedDeletedRecord >();
+            add< NamespaceDetailsTests::AllocQuantizedWithExtra >();
+            add< NamespaceDetailsTests::AllocQuantizedWithoutExtra >();
+            add< NamespaceDetailsTests::AllocNotQuantizedNearDeletedSize >();
+            add< NamespaceDetailsTests::AllocFailsWithTooSmallDeletedRecord >();
+            add< NamespaceDetailsTests::TwoExtent >();
+            add< NamespaceDetailsTests::TruncateCapped >();
+            add< NamespaceDetailsTests::Migrate >();
+            add< NamespaceDetailsTests::SwapIndexEntriesTest >();
+            //            add< NamespaceDetailsTests::BigCollection >();
+            add< NamespaceDetailsTests::Size >();
+            add< NamespaceDetailsTests::SetIndexIsMultikey >();
+            add< CollectionInfoCacheTests::ClearQueryCache >();
+            add< MissingFieldTests::BtreeIndexMissingField >();
+            add< MissingFieldTests::TwoDIndexMissingField >();
+            add< MissingFieldTests::HashedIndexMissingField >();
+            add< MissingFieldTests::HashedIndexMissingFieldAlternateSeed >();
         }
     } myall;
 } // namespace NamespaceTests

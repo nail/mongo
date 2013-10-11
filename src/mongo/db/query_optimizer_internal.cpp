@@ -27,6 +27,7 @@
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_selection_policy.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/structure/collection.h"
 
 //#define DEBUGQO(x) cout << x << endl;
 #define DEBUGQO(x)
@@ -1415,38 +1416,41 @@ namespace mongo {
         return cl->idx( idxNo ).suitability( frsp.frsForIndex( cl , idxNo ) , order )
                != IndexDetails::USELESS;
     }
-    
-    void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        Collection *cl = getCollection(frsp.ns());
-        if (cl != NULL) {
-            QueryCache &qc = cl->getQueryCache();
-            QueryCache::Lock::Exclusive lk(qc);
-            CachedQueryPlan noCachedPlan;
-            qc.registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
-            qc.registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
-        }
+
+    void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair& frsp,
+                                                    const BSONObj& order ) {
+        CachedQueryPlan noCachedPlan;
+
+        Collection* collection = cc().database()->getCollection( frsp.ns() );
+        if ( !collection )
+            return;
+
+        collection->infoCache()->registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ),
+                                                                    noCachedPlan );
+        collection->infoCache()->registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ),
+                                                                    noCachedPlan );
     }
-    
-    CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        Collection *cl = getCollection(frsp.ns());
-        if (cl != NULL) {
-            QueryCache &qc = cl->getQueryCache();
-            QueryCache::Lock::Shared lk(qc);
-            // TODO Maybe it would make sense to return the index with the lowest
-            // nscanned if there are two possibilities.
-            {
-                QueryPattern pattern = frsp._singleKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = qc.cachedQueryPlanForPattern( pattern );
-                if ( !cachedQueryPlan.indexKey().isEmpty() ) {
-                    return cachedQueryPlan;
-                }
+
+    CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair& frsp,
+                                                            const BSONObj& order ) {
+
+        Collection* collection = cc().database()->getCollection( frsp.ns() );
+        verify( collection );
+
+        // TODO Maybe it would make sense to return the index with the lowest
+        // nscanned if there are two possibilities.
+        {
+            QueryPattern pattern = frsp._singleKey.pattern( order );
+            CachedQueryPlan cachedQueryPlan = collection->infoCache()->cachedQueryPlanForPattern( pattern );
+            if ( !cachedQueryPlan.indexKey().isEmpty() ) {
+                return cachedQueryPlan;
             }
-            {
-                QueryPattern pattern = frsp._multiKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = qc.cachedQueryPlanForPattern( pattern );
-                if ( !cachedQueryPlan.indexKey().isEmpty() ) {
-                    return cachedQueryPlan;
-                }
+        }
+        {
+            QueryPattern pattern = frsp._multiKey.pattern( order );
+            CachedQueryPlan cachedQueryPlan = collection->infoCache()->cachedQueryPlanForPattern( pattern );
+            if ( !cachedQueryPlan.indexKey().isEmpty() ) {
+                return cachedQueryPlan;
             }
         }
         return CachedQueryPlan();

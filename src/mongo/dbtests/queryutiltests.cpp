@@ -23,8 +23,8 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/querypattern.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/json.h"
+#include "mongo/db/queryutil.h"
+#include "mongo/db/structure/collection.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace QueryUtilTests {
@@ -1627,7 +1627,8 @@ namespace QueryUtilTests {
             }
         protected:
             static const char *ns() { return "unittests.FieldRangeSetPairTests"; }
-            static Collection *nsd() { return getCollection( ns() ); }
+            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            Client::Context* ctx() { return &_ctx; }
             IndexDetails *index( const BSONObj &key ) {
                 stringstream ss;
                 ss << indexNum_++;
@@ -1677,17 +1678,21 @@ namespace QueryUtilTests {
                 index( BSON( "a" << 1 ) );
                 BSONObj query = BSON( "a" << GT << 5 << LT << 5 );
                 BSONObj sort = BSON( "a" << 1 );
-                
+
+                Collection* collection = ctx()->db()->getCollection( ns() );
+                verify( collection );
+                CollectionInfoCache* cache = collection->infoCache();
+
                 // Record the a:1 index for the query's single and multi key query patterns.
                 QueryPattern singleKey = FieldRangeSet( ns(), query, true, true ).pattern( sort );
-                nsd()->getQueryCache().registerCachedQueryPlanForPattern( singleKey,
-                                                       CachedQueryPlan( BSON( "a" << 1 ), 1,
-                                                        CandidatePlanCharacter( true, true ) ) );
+                cache->registerCachedQueryPlanForPattern( singleKey,
+                                                          CachedQueryPlan( BSON( "a" << 1 ), 1,
+                                                                           CandidatePlanCharacter( true, true ) ) );
                 QueryPattern multiKey = FieldRangeSet( ns(), query, false, true ).pattern( sort );
-                nsd()->getQueryCache().registerCachedQueryPlanForPattern( multiKey,
-                                                       CachedQueryPlan( BSON( "a" << 1 ), 5,
-                                                        CandidatePlanCharacter( true, true ) ) );
-                
+                cache->registerCachedQueryPlanForPattern( multiKey,
+                                                          CachedQueryPlan( BSON( "a" << 1 ), 5,
+                                                                           CandidatePlanCharacter( true, true ) ) );
+
                 // The single and multi key fields for this query must differ for the test to be
                 // valid.
                 ASSERT( singleKey != multiKey );
@@ -1697,8 +1702,8 @@ namespace QueryUtilTests {
                 QueryUtilIndexed::clearIndexesForPatterns( frsp, sort );
                 
                 // Check that the recorded query plans were cleared.
-                ASSERT_EQUALS( BSONObj(), nsd()->getQueryCache().cachedQueryPlanForPattern( singleKey ).indexKey() );
-                ASSERT_EQUALS( BSONObj(), nsd()->getQueryCache().cachedQueryPlanForPattern( multiKey ).indexKey() );
+                ASSERT_EQUALS( BSONObj(), cache->cachedQueryPlanForPattern( singleKey ).indexKey() );
+                ASSERT_EQUALS( BSONObj(), cache->cachedQueryPlanForPattern( multiKey ).indexKey() );
             }
         };
 
@@ -1711,27 +1716,31 @@ namespace QueryUtilTests {
                 BSONObj query = BSON( "a" << GT << 5 << LT << 5 );
                 BSONObj sort = BSON( "a" << 1 );
 
+                Collection* collection = ctx()->db()->getCollection( ns() );
+                verify( collection );
+                CollectionInfoCache* cache = collection->infoCache();
+
                 // No query plan is returned when none has been recorded.
                 FieldRangeSetPair frsp( ns(), query );
                 ASSERT_EQUALS( BSONObj(),
                               QueryUtilIndexed::bestIndexForPatterns( frsp, sort ).indexKey() );
-                
+
                 // A multikey index query plan is returned if recorded.
                 QueryPattern multiKey = FieldRangeSet( ns(), query, false, true ).pattern( sort );
-                nsd()->getQueryCache().registerCachedQueryPlanForPattern( multiKey,
-                                                       CachedQueryPlan( BSON( "a" << 1 ), 5,
-                                                        CandidatePlanCharacter( true, true ) ) );
+                cache->registerCachedQueryPlanForPattern( multiKey,
+                                                          CachedQueryPlan( BSON( "a" << 1 ), 5,
+                                                                           CandidatePlanCharacter( true, true ) ) );
                 ASSERT_EQUALS( BSON( "a" << 1 ),
                               QueryUtilIndexed::bestIndexForPatterns( frsp, sort ).indexKey() );
 
                 // A non multikey index query plan is preferentially returned if recorded.
                 QueryPattern singleKey = FieldRangeSet( ns(), query, true, true ).pattern( sort );
-                nsd()->getQueryCache().registerCachedQueryPlanForPattern( singleKey,
-                                                       CachedQueryPlan( BSON( "b" << 1 ), 5,
-                                                        CandidatePlanCharacter( true, true ) ) );
+                cache->registerCachedQueryPlanForPattern( singleKey,
+                                                          CachedQueryPlan( BSON( "b" << 1 ), 5,
+                                                                           CandidatePlanCharacter( true, true ) ) );
                 ASSERT_EQUALS( BSON( "b" << 1 ),
                               QueryUtilIndexed::bestIndexForPatterns( frsp, sort ).indexKey() );
-                
+
                 // The single and multi key fields for this query must differ for the test to be
                 // valid.
                 ASSERT( singleKey != multiKey );
