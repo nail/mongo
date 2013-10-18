@@ -121,7 +121,7 @@ namespace {
         static const int bufSize = DateStringBuffer::dataCapacity;
         char* const buf = result->data;
         struct tm t;
-        time_t_to_Struct(millisToTimeT(static_cast<long long>(date.millis)), &t, local);
+        time_t_to_Struct(date.toTimeT(), &t, local);
         int pos = strftime(buf, bufSize, MONGO_ISO_DATE_FMT_NO_TZ, &t);
         dassert(0 < pos);
         char* cur = buf + pos;
