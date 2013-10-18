@@ -778,21 +778,20 @@ namespace mongo {
         verifySettled();
     }
 
-    void BackgroundSync::startOpSyncThread() {
+    bool BackgroundSync::isPaused() {
         boost::unique_lock<boost::mutex> lock(_mutex);
-        // if we are shutting down, don't start replication
-        // otherwise, we will be stuck waiting on _opSyncRunning
-        // to go true, and it may never go true
-        if (!_opSyncShouldExit) {
-            verifySettled();
+        return _pause;
+    }
 
-            _opSyncShouldRun = true;
-            _opSyncCanRunCondVar.notify_all();
-            while (!_opSyncRunning) {
-                _opSyncRunningCondVar.wait(lock);
-            }
-            // sanity check that no one has changed this variable
-            verify(_opSyncShouldRun);
+    void BackgroundSync::stopReplicationAndFlushBuffer() {
+        boost::unique_lock<boost::mutex> lck(_mutex);
+
+        // 1. Tell syncing to stop
+        _assumingPrimary = true;
+
+        // 2. Wait for syncing to stop and buffer to be applied
+        while (!(_pause && _appliedBuffer)) {
+            _condvar.wait(lck);
         }
     }
 
