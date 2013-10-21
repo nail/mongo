@@ -120,122 +120,83 @@ namespace mongo {
             return ret;
         }
 #ifndef _WIN32
-        ret = options->addOption(OD("nounixsocket", "nounixsocket", moe::Switch,
-                    "disable listening on unix sockets", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("unixSocketPrefix", "unixSocketPrefix", moe::String,
-                    "alternative directory for UNIX domain sockets (defaults to /tmp)", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("fork", "fork", moe::Switch, "fork server process", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("syslog", "syslog", moe::Switch,
-                    "log to system's syslog facility instead of file or stdout", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("nounixsocket", "nounixsocket", moe::Switch,
+                "disable listening on unix sockets");
+
+        options->addOptionChaining("unixSocketPrefix", "unixSocketPrefix", moe::String,
+                "alternative directory for UNIX domain sockets (defaults to /tmp)");
+
+        options->addOptionChaining("fork", "fork", moe::Switch, "fork server process");
+
+        options->addOptionChaining("syslog", "syslog", moe::Switch,
+                "log to system's syslog facility instead of file or stdout");
+
 #endif
 
         /* support for -vv -vvvv etc. */
         for (string s = "vv"; s.length() <= 12; s.append("v")) {
-            ret = options->addOption(OD(s.c_str(), s.c_str(), moe::Switch, "verbose", false));
-            if(!ret.isOK()) {
-                return ret;
-            }
+            options->addOptionChaining(s.c_str(), s.c_str(), moe::Switch, "verbose")
+                                      .hidden();
         }
 
         // Extra hidden options
-        ret = options->addOption(OD("nohttpinterface", "nohttpinterface", moe::Switch,
-                    "disable http interface", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("objcheck", "objcheck", moe::Switch,
-                    "inspect client data for validity on receipt (DEFAULT)", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("noobjcheck", "noobjcheck", moe::Switch,
-                    "do NOT inspect client data for validity on receipt", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("traceExceptions", "traceExceptions", moe::Switch,
-                    "log stack traces for every exception", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("enableExperimentalIndexStatsCmd",
-                    "enableExperimentalIndexStatsCmd", moe::Switch,
-                    "EXPERIMENTAL (UNSUPPORTED). "
-                    "Enable command computing aggregate statistics on indexes.", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("enableExperimentalStorageDetailsCmd",
-                    "enableExperimentalStorageDetailsCmd", moe::Switch,
-                    "EXPERIMENTAL (UNSUPPORTED). "
-                    "Enable command computing aggregate statistics on storage.", false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("nohttpinterface", "nohttpinterface", moe::Switch,
+                "disable http interface")
+                                  .hidden();
+
+        options->addOptionChaining("objcheck", "objcheck", moe::Switch,
+                "inspect client data for validity on receipt (DEFAULT)")
+                                  .hidden();
+
+        options->addOptionChaining("noobjcheck", "noobjcheck", moe::Switch,
+                "do NOT inspect client data for validity on receipt")
+                                  .hidden();
+
+        options->addOptionChaining("traceExceptions", "traceExceptions", moe::Switch,
+                "log stack traces for every exception")
+                                  .hidden();
+
+        options->addOptionChaining("enableExperimentalIndexStatsCmd",
+                "enableExperimentalIndexStatsCmd", moe::Switch, "EXPERIMENTAL (UNSUPPORTED). "
+                "Enable command computing aggregate statistics on indexes.")
+                                  .hidden();
+
+        options->addOptionChaining("enableExperimentalStorageDetailsCmd",
+                "enableExperimentalStorageDetailsCmd", moe::Switch, "EXPERIMENTAL (UNSUPPORTED). "
+                "Enable command computing aggregate statistics on storage.")
+                                  .hidden();
+
 
         return Status::OK();
     }
 
     Status addWindowsServerOptions(moe::OptionSection* options) {
-        Status ret = options->addOption(OD("install", "install", moe::Switch,
-                    "install Windows service", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("remove", "remove", moe::Switch, "remove Windows service",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("reinstall", "reinstall", moe::Switch,
-                    "reinstall Windows service (equivalent to --remove followed by --install)",
-                    true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("serviceName", "serviceName", moe::String,
-                    "Windows service name", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("serviceDisplayName", "serviceDisplayName", moe::String,
-                    "Windows service display name", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("serviceDescription", "serviceDescription", moe::String,
-                    "Windows service description", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("serviceUser", "serviceUser", moe::String,
-                    "account for service execution", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addOption(OD("servicePassword", "servicePassword", moe::String,
-                    "password used to authenticate serviceUser", true));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("install", "install", moe::Switch, "install Windows service");
 
-        ret = options->addOption(OD("service", "service", moe::Switch, "start mongodb service",
-                    false));
-        if (!ret.isOK()) {
-            return ret;
-        }
+        options->addOptionChaining("remove", "remove", moe::Switch, "remove Windows service");
+
+        options->addOptionChaining("reinstall", "reinstall", moe::Switch,
+                "reinstall Windows service (equivalent to --remove followed by --install)");
+
+        options->addOptionChaining("serviceName", "serviceName", moe::String,
+                "Windows service name");
+
+        options->addOptionChaining("serviceDisplayName", "serviceDisplayName", moe::String,
+                "Windows service display name");
+
+        options->addOptionChaining("serviceDescription", "serviceDescription", moe::String,
+                "Windows service description");
+
+        options->addOptionChaining("serviceUser", "serviceUser", moe::String,
+                "account for service execution");
+
+        options->addOptionChaining("servicePassword", "servicePassword", moe::String,
+                "password used to authenticate serviceUser");
+
+
+        options->addOptionChaining("service", "service", moe::Switch, "start mongodb service")
+                                  .hidden();
+
 
         return Status::OK();
     }
