@@ -25,9 +25,6 @@ namespace mongo {
 
     MongoImportGlobalParams mongoImportGlobalParams;
 
-    typedef moe::OptionDescription OD;
-    typedef moe::PositionalOptionDescription POD;
-
     Status addMongoImportOptions(moe::OptionSection* options) {
         Status ret = addGeneralToolOptions(options);
         if (!ret.isOK()) {
@@ -61,7 +58,8 @@ namespace mongo {
                 "type of file to import.  default: json (json,csv,tsv)");
 
         options->addOptionChaining("file", "file", moe::String,
-                "file to import from; if not specified stdin is used");
+                "file to import from; if not specified stdin is used")
+                                  .positional(1, 1);
 
         options->addOptionChaining("drop", "drop", moe::Switch, "drop collection first ");
 
@@ -86,11 +84,6 @@ namespace mongo {
                 "don't actually import. useful for benchmarking parser")
                                   .hidden();
 
-
-        ret = options->addPositionalOption(POD( "file", moe::String, 1 ));
-        if(!ret.isOK()) {
-            return ret;
-        }
 
         return Status::OK();
     }

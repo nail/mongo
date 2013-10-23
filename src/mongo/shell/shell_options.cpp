@@ -34,9 +34,6 @@ namespace mongo {
 
     Status addMongoShellOptions(moe::OptionSection* options) {
 
-        typedef moe::OptionDescription OD;
-        typedef moe::PositionalOptionDescription POD;
-
         options->addOptionChaining("shell", "shell", moe::Switch,
                 "run the shell after executing files");
 
@@ -87,10 +84,12 @@ namespace mongo {
 #endif
 
         options->addOptionChaining("dbaddress", "dbaddress", moe::String, "dbaddress")
-                                  .hidden();
+                                  .hidden()
+                                  .positional(1, 1);
 
         options->addOptionChaining("files", "files", moe::StringVector, "files")
-                                  .hidden();
+                                  .hidden()
+                                  .positional(2, -1);
 
         // for testing, kill op will also be disabled automatically if the tests starts a mongo
         // program
@@ -101,15 +100,6 @@ namespace mongo {
         options->addOptionChaining("autokillop", "autokillop", moe::Switch, "autokillop")
                                   .hidden();
 
-
-        ret = options->addPositionalOption(POD("dbaddress", moe::String, 1));
-        if (!ret.isOK()) {
-            return ret;
-        }
-        ret = options->addPositionalOption(POD("files", moe::String, -1));
-        if (!ret.isOK()) {
-            return ret;
-        }
 
         return Status::OK();
     }
