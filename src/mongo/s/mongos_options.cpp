@@ -62,28 +62,32 @@ namespace mongo {
 
         moe::OptionSection sharding_options("Sharding options");
 
-        sharding_options.addOptionChaining("configdb", "configdb", moe::String,
+        sharding_options.addOptionChaining("sharding.configDB", "configdb", moe::String,
                 "1 or 3 comma separated config servers");
 
-        sharding_options.addOptionChaining("localThreshold", "localThreshold", moe::Int,
-                "ping time (in ms) for a node to be considered local (default 15ms)");
+        sharding_options.addOptionChaining("replication.localPingThresholdMs", "localThreshold",
+                moe::Int, "ping time (in ms) for a node to be considered local (default 15ms)");
 
-        sharding_options.addOptionChaining("test", "test", moe::Switch, "just run unit tests");
+        sharding_options.addOptionChaining("test", "test", moe::Switch, "just run unit tests")
+                                          .setSources(moe::SourceAllLegacy);
 
         sharding_options.addOptionChaining("upgrade", "upgrade", moe::Switch,
-                "upgrade meta data version");
+                "upgrade meta data version")
+                                          .setSources(moe::SourceAllLegacy);
 
         sharding_options.addOptionChaining("chunkSize", "chunkSize", moe::Int,
                 "maximum amount of data per chunk");
 
-        sharding_options.addOptionChaining("ipv6", "ipv6", moe::Switch,
+        sharding_options.addOptionChaining("net.ipv6", "ipv6", moe::Switch,
                 "enable IPv6 support (disabled by default)");
 
-        sharding_options.addOptionChaining("jsonp", "jsonp", moe::Switch,
-                "allow JSONP access via http (has security implications)");
+        sharding_options.addOptionChaining("net.jsonp", "jsonp", moe::Switch,
+                "allow JSONP access via http (has security implications)")
+                                         .setSources(moe::SourceAllLegacy);
 
         sharding_options.addOptionChaining("noscripting", "noscripting", moe::Switch,
-                "disable scripting engine");
+                "disable scripting engine")
+                                         .setSources(moe::SourceAllLegacy);
 
 
         options->addSection(general_options);
@@ -100,7 +104,12 @@ namespace mongo {
 
         options->addOptionChaining("noAutoSplit", "noAutoSplit", moe::Switch,
                 "do not send split commands with writes")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
+
+        options->addOptionChaining("sharding.autoSplit", "", moe::Bool,
+                "send split commands with writes")
+                                  .setSources(moe::SourceYAMLConfig);
 
 
         return Status::OK();

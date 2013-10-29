@@ -186,68 +186,122 @@ namespace mongo {
         general_options.addOptionChaining("shutdown", "shutdown", moe::Switch,
                 "kill a running server (for init scripts)");
 
+        general_options.addOptionChaining("dur", "dur", moe::Switch, "enable journaling")
+                                         .hidden()
+                                         .setSources(moe::SourceAllLegacy);
+
+        general_options.addOptionChaining("nodur", "nodur", moe::Switch, "disable journaling")
+                                         .hidden()
+                                         .setSources(moe::SourceAllLegacy);
+
+        // Way to enable or disable journaling in JSON Config
+        general_options.addOptionChaining("storage.journal.enabled", "", moe::Bool,
+                "enable journaling")
+                                         .setSources(moe::SourceYAMLConfig);
+
+        // Two ways to set durability diagnostic options.  durOptions is deprecated
+        general_options.addOptionChaining("storage.journal.debugFlags", "journalOptions", moe::Int,
+                "journal diagnostic options")
+                                         .incompatibleWith("durOptions");
+
+        general_options.addOptionChaining("durOptions", "durOptions", moe::Int,
+                "durability diagnostic options")
+                                         .hidden()
+                                         .setSources(moe::SourceAllLegacy)
+                                         .incompatibleWith("storage.journal.debugFlags");
+
+        general_options.addOptionChaining("storage.journal.commitIntervalMs",
+                "journalCommitInterval", moe::Unsigned, "how often to group/batch commit (ms)");
+
+        // Deprecated option that we don't want people to use for performance reasons
+        options->addOptionChaining("nopreallocj", "nopreallocj", moe::Switch,
+                "don't preallocate journal files")
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
+
+#if defined(__linux__)
+        general_options.addOptionChaining("shutdown", "shutdown", moe::Switch,
+                "kill a running server (for init scripts)");
+
 #endif
-        general_options.addOptionChaining("slowms", "slowms", moe::Int,
-                "value of slow for profile and console log")
-                                         .setDefault(moe::Value(100));
 
-        general_options.addOptionChaining("smallfiles", "smallfiles", moe::Switch,
-                "use a smaller default file size");
+        // Master Slave Options
 
-        general_options.addOptionChaining("syncdelay", "syncdelay", moe::Double,
-                "seconds between disk syncs (0=never, but not recommended)")
-                                         .setDefault(moe::Value(60.0));
+        ms_options.addOptionChaining("master", "master", moe::Switch, "master mode")
+                                    .setSources(moe::SourceAllLegacy);
 
-        general_options.addOptionChaining("sysinfo", "sysinfo", moe::Switch,
-                "print some diagnostic system information");
+        ms_options.addOptionChaining("slave", "slave", moe::Switch, "slave mode")
+                                    .setSources(moe::SourceAllLegacy);
 
-        general_options.addOptionChaining("upgrade", "upgrade", moe::Switch,
-                "upgrade db if needed");
+        ms_options.addOptionChaining("source", "source", moe::String,
+                "when slave: specify master as <server:port>")
+                                    .setSources(moe::SourceAllLegacy);
 
+        ms_options.addOptionChaining("only", "only", moe::String,
+                "when slave: specify a single database to replicate")
+                                    .setSources(moe::SourceAllLegacy);
 
-        replication_options.addOptionChaining("oplogSize", "oplogSize", moe::Int,
+        ms_options.addOptionChaining("slavedelay", "slavedelay", moe::Int,
+                "specify delay (in seconds) to be used when applying master ops to slave")
+                                    .setSources(moe::SourceAllLegacy);
+
+        ms_options.addOptionChaining("autoresync", "autoresync", moe::Switch,
+                "automatically resync if slave data is stale")
+                                    .setSources(moe::SourceAllLegacy);
+
+        // Replication Options
+
+        replication_options.addOptionChaining("replication.oplogSizeMB", "oplogSize", moe::Int,
                 "size to use (in MB) for replication op log. default is 5% of disk space "
                 "(i.e. large is good)");
 
+        rs_options.addOptionChaining("replication.replSet", "replSet", moe::String,
+                "arg is <setname>[/<optionalseedhostlist>]")
+                                    .setSources(moe::SourceAllLegacy)
+                                    .incompatibleWith("replication.replSetName");
 
-        ms_options.addOptionChaining("master", "master", moe::Switch, "master mode");
+        rs_options.addOptionChaining("replication.replSetName", "", moe::String, "arg is <setname>")
+                                    .setSources(moe::SourceYAMLConfig)
+                                    .format("[^/]", "[replica set name with no \"/\"]")
+                                    .incompatibleWith("replication.replSet");
 
-        ms_options.addOptionChaining("slave", "slave", moe::Switch, "slave mode");
+        rs_options.addOptionChaining("replication.secondaryIndexPrefetch", "replIndexPrefetch", moe::String,
+                "specify index prefetching behavior (if secondary) [none|_id_only|all]")
+                                    .format("(:?none)|(:?_id_only)|(:?all)",
+                                            "(none/_id_only/all)");
 
-        ms_options.addOptionChaining("source", "source", moe::String,
-                "when slave: specify master as <server:port>");
+        // Sharding Options
 
-        ms_options.addOptionChaining("only", "only", moe::String,
-                "when slave: specify a single database to replicate");
-
-        ms_options.addOptionChaining("slavedelay", "slavedelay", moe::Int,
-                "specify delay (in seconds) to be used when applying master ops to slave");
-
-        ms_options.addOptionChaining("autoresync", "autoresync", moe::Switch,
-                "automatically resync if slave data is stale");
-
-
-        rs_options.addOptionChaining("replSet", "replSet", moe::String,
-                "arg is <setname>[/<optionalseedhostlist>]");
-
-        rs_options.addOptionChaining("replIndexPrefetch", "replIndexPrefetch", moe::String,
-                "specify index prefetching behavior (if secondary) [none|_id_only|all]");
-
-
-        sharding_options.addOptionChaining("configsvr", "configsvr", moe::Switch,
+        sharding_options.addOptionChaining("sharding.configsvr", "configsvr", moe::Switch,
                 "declare this is a config db of a cluster; default port 27019; "
-                "default dir /data/configdb");
+                "default dir /data/configdb")
+                                          .setSources(moe::SourceAllLegacy)
+                                          .incompatibleWith("sharding.clusterRole");
 
-        sharding_options.addOptionChaining("shardsvr", "shardsvr", moe::Switch,
-                "declare this is a shard db of a cluster; default port 27018");
+        sharding_options.addOptionChaining("sharding.shardsvr", "shardsvr", moe::Switch,
+                "declare this is a shard db of a cluster; default port 27018")
+                                          .setSources(moe::SourceAllLegacy)
+                                          .incompatibleWith("sharding.clusterRole");
 
+        sharding_options.addOptionChaining("sharding.clusterRole", "", moe::String,
+                "Choose what role this mongod has in a sharded cluster.  Possible values are:\n"
+                "    \"configsvr\": Start this node as a config server.  Starts on port 27019 by "
+                "default."
+                "    \"shardsvr\": Start this node as a shard server.  Starts on port 27018 by "
+                "default.")
+                                          .setSources(moe::SourceYAMLConfig)
+                                          .incompatibleWith("sharding.configsvr")
+                                          .incompatibleWith("sharding.shardsvr")
+                                          .format("(:?configsvr)|(:?shardsvr)",
+                                                  "(configsvr/shardsvr)");
 
-        sharding_options.addOptionChaining("noMoveParanoia", "noMoveParanoia", moe::Switch,
+        sharding_options.addOptionChaining("sharding.noMoveParanoia", "noMoveParanoia", moe::Switch,
                 "turn off paranoid saving of data for the moveChunk command; default")
-                                          .hidden();
+                                          .hidden()
+                                          .setSources(moe::SourceAllLegacy);
 
-        sharding_options.addOptionChaining("moveParanoia", "moveParanoia", moe::Switch,
-                "turn on paranoid saving of data during the moveChunk command "
+        sharding_options.addOptionChaining("sharding.archiveMovedChunks", "moveParanoia",
+                moe::Switch, "turn on paranoid saving of data during the moveChunk command "
                 "(used for internal system diagnostics)")
                                           .hidden();
 
@@ -263,13 +317,17 @@ namespace mongo {
         options->addSection(ssl_options);
 #endif
 
+        // The following are legacy options that are disallowed in the JSON config file
+
         options->addOptionChaining("fastsync", "fastsync", moe::Switch,
                 "indicate that this instance is starting from a dbpath snapshot of the repl peer")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         options->addOptionChaining("pretouch", "pretouch", moe::Int,
                 "n pretouch threads for applying master/slave operations")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         // This is a deprecated option that we are supporting for backwards compatibility
         // The first value for this option can be either 'dbpath' or 'run'.
@@ -277,39 +335,31 @@ namespace mongo {
         // If it is 'run', mongod runs normally.  Providing extra values is an error.
         options->addOptionChaining("command", "command", moe::StringVector, "command")
                                   .hidden()
-                                  .positional(1, 3);
+                                  .positional(1, 3)
+                                  .setSources(moe::SourceAllLegacy);
 
         options->addOptionChaining("cacheSize", "cacheSize", moe::Long,
                 "cache size (in MB) for rec store")
-                                  .hidden();
-
-        options->addOptionChaining("nodur", "nodur", moe::Switch, "disable journaling")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         // things we don't want people to use
         options->addOptionChaining("nohints", "nohints", moe::Switch, "ignore query hints")
-                                  .hidden();
-
-        options->addOptionChaining("nopreallocj", "nopreallocj", moe::Switch,
-                "don't preallocate journal files")
-                                  .hidden();
-
-        options->addOptionChaining("dur", "dur", moe::Switch, "enable journaling")
-                                  .hidden();
-
-        options->addOptionChaining("durOptions", "durOptions", moe::Int,
-                "durability diagnostic options")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         // deprecated pairing command line options
         options->addOptionChaining("pairwith", "pairwith", moe::Switch, "DEPRECATED")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         options->addOptionChaining("arbiter", "arbiter", moe::Switch, "DEPRECATED")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         options->addOptionChaining("opIdMem", "opIdMem", moe::Switch, "DEPRECATED")
-                                  .hidden();
+                                  .hidden()
+                                  .setSources(moe::SourceAllLegacy);
 
         return Status::OK();
     }

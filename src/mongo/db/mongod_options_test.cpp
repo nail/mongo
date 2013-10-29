@@ -24,6 +24,146 @@ namespace {
 
     namespace moe = ::mongo::optionenvironment;
 
+    enum DottedName {
+        nopreallocj,
+        fastsync,
+        pretouch,
+        command,
+        cacheSize,
+        nohints,
+        pairwith,
+        arbiter,
+        opIdMem,
+        help,
+        version,
+        config,
+        verbose,
+        systemLog_verbosity,
+        systemLog_quiet,
+        net_port,
+        net_bindIp,
+        net_maxIncomingConnections,
+        logpath,
+        systemLog_path,
+        systemLog_destination,
+        systemLog_syslogFacility,
+        systemLog_logAppend,
+        systemLog_timeStampFormat,
+        processManagement_pidFilePath,
+        security_keyFile,
+        setParameter,
+        httpinterface,
+        net_http_enabled,
+        net_http_port,
+        net_http_RESTInterfaceEnabled,
+        net_http_JSONPEnabled,
+        security_clusterAuthMode,
+        nounixsocket,
+        net_unixDomainSocket_enabled,
+        net_unixDomainSocket_pathPrefix,
+        processManagement_fork,
+        systemLog_syslog,
+        vv,
+        vvv,
+        vvvv,
+        vvvvv,
+        vvvvvv,
+        vvvvvvv,
+        vvvvvvvv,
+        vvvvvvvvv,
+        vvvvvvvvvv,
+        vvvvvvvvvvv,
+        vvvvvvvvvvvv,
+        nohttpinterface,
+        objcheck,
+        noobjcheck,
+        net_wireObjectCheck,
+        systemLog_traceAllExceptions,
+        enableExperimentalIndexStatsCmd,
+        enableExperimentalStorageDetailsCmd,
+        auth,
+        noauth,
+        security_authentication,
+        security_authSchemaVersion,
+        security_authenticationMechanisms,
+        security_enableLocalhostAuthBypass,
+        security_supportCompatibilityFormPrivilegeDocuments,
+        net_ipv6,
+        diaglog,
+        operationProfiling_slowOpThresholdMs,
+        profile,
+        operationProfiling_mode,
+        cpu,
+        sysinfo,
+        storage_dbPath,
+        storage_directoryPerDB,
+        noIndexBuildRetry,
+        storage_indexBuildRetry,
+        noprealloc,
+        storage_preallocDataFiles,
+        storage_nsSize,
+        storage_quota_enforced,
+        storage_quota_maxFilesPerDB,
+        storage_smallFiles,
+        storage_syncPeriodSecs,
+        upgrade,
+        repair,
+        storage_repairPath,
+        noscripting,
+        notablescan,
+        journal,
+        nojournal,
+        dur,
+        nodur,
+        storage_journal_enabled,
+        storage_journal_debugFlags,
+        durOptions,
+        storage_journal_commitIntervalMs,
+        replication_oplogSizeMB,
+        masterSlave_master,
+        masterSlave_slave,
+        masterSlave_source,
+        masterSlave_only,
+        masterSlave_slavedelay,
+        masterSlave_autoresync,
+        replication_replSet,
+        replication_replSetName,
+        replication_secondaryIndexPrefetch,
+        sharding_configsvr,
+        sharding_shardsvr,
+        sharding_clusterRole,
+        sharding_noMoveParanoia,
+        sharding_archiveMovedChunks,
+        auditLog_log,
+        auditLog_format,
+        auditLog_destination,
+        auditLog_path,
+        auditLog_filter,
+        snmp_subagent,
+        snmp_master,
+        net_ssl_sslOnNormalPorts,
+        net_ssl_mode,
+        net_ssl_PEMKeyFile,
+        net_ssl_PEMKeyPassword,
+        net_ssl_clusterFile,
+        net_ssl_clusterPassword,
+        net_ssl_CAFile,
+        net_ssl_CRLFile,
+        net_ssl_weakCertificateValidation,
+        net_ssl_allowInvalidCertificates,
+        net_ssl_FIPSMode,
+        install,
+        remove,
+        reinstall,
+        processManagement_windowsService_serviceName,
+        processManagement_windowsService_displayName,
+        processManagement_windowsService_description,
+        processManagement_windowsService_serviceUser,
+        processManagement_windowsService_servicePassword,
+        service,
+        shutdown
+    };
+
     TEST(Registration, RegisterAllOptions) {
 
         moe::OptionSection options;
@@ -33,10 +173,164 @@ namespace {
         std::vector<moe::OptionDescription> options_vector;
         ASSERT_OK(options.getAllOptions(&options_vector));
 
-        for(std::vector<moe::OptionDescription>::const_iterator iterator = options_vector.begin();
-            iterator != options_vector.end(); iterator++) {
+        std::map<std::string, DottedName> dottedNameMap;
 
-            if (iterator->_dottedName == "fastsync") {
+        dottedNameMap["nopreallocj"] = nopreallocj;
+        dottedNameMap["fastsync"] = fastsync;
+        dottedNameMap["pretouch"] = pretouch;
+        dottedNameMap["command"] = command;
+        dottedNameMap["cacheSize"] = cacheSize;
+        dottedNameMap["nohints"] = nohints;
+        dottedNameMap["pairwith"] = pairwith;
+        dottedNameMap["arbiter"] = arbiter;
+        dottedNameMap["opIdMem"] = opIdMem;
+        dottedNameMap["help"] = help;
+        dottedNameMap["version"] = version;
+        dottedNameMap["config"] = config;
+        dottedNameMap["verbose"] = verbose;
+        dottedNameMap["systemLog.verbosity"] = systemLog_verbosity;
+        dottedNameMap["systemLog.quiet"] = systemLog_quiet;
+        dottedNameMap["net.port"] = net_port;
+        dottedNameMap["net.bindIp"] = net_bindIp;
+        dottedNameMap["net.maxIncomingConnections"] = net_maxIncomingConnections;
+        dottedNameMap["logpath"] = logpath;
+        dottedNameMap["systemLog.path"] = systemLog_path;
+        dottedNameMap["systemLog.destination"] = systemLog_destination;
+        dottedNameMap["systemLog.syslogFacility"] = systemLog_syslogFacility;
+        dottedNameMap["systemLog.logAppend"] = systemLog_logAppend;
+        dottedNameMap["systemLog.timeStampFormat"] = systemLog_timeStampFormat;
+        dottedNameMap["processManagement.pidFilePath"] = processManagement_pidFilePath;
+        dottedNameMap["security.keyFile"] = security_keyFile;
+        dottedNameMap["setParameter"] = setParameter;
+        dottedNameMap["httpinterface"] = httpinterface;
+        dottedNameMap["net.http.enabled"] = net_http_enabled;
+        dottedNameMap["net.http.port"] = net_http_port;
+        dottedNameMap["net.http.RESTInterfaceEnabled"] = net_http_RESTInterfaceEnabled;
+        dottedNameMap["net.http.JSONPEnabled"] = net_http_JSONPEnabled;
+        dottedNameMap["security.clusterAuthMode"] = security_clusterAuthMode;
+        dottedNameMap["nounixsocket"] = nounixsocket;
+        dottedNameMap["net.unixDomainSocket.enabled"] = net_unixDomainSocket_enabled;
+        dottedNameMap["net.unixDomainSocket.pathPrefix"] = net_unixDomainSocket_pathPrefix;
+        dottedNameMap["processManagement.fork"] = processManagement_fork;
+        dottedNameMap["systemLog.syslog"] = systemLog_syslog;
+        dottedNameMap["vv"] = vv;
+        dottedNameMap["vvv"] = vvv;
+        dottedNameMap["vvvv"] = vvvv;
+        dottedNameMap["vvvvv"] = vvvvv;
+        dottedNameMap["vvvvvv"] = vvvvvv;
+        dottedNameMap["vvvvvvv"] = vvvvvvv;
+        dottedNameMap["vvvvvvvv"] = vvvvvvvv;
+        dottedNameMap["vvvvvvvvv"] = vvvvvvvvv;
+        dottedNameMap["vvvvvvvvvv"] = vvvvvvvvvv;
+        dottedNameMap["vvvvvvvvvvv"] = vvvvvvvvvvv;
+        dottedNameMap["vvvvvvvvvvvv"] = vvvvvvvvvvvv;
+        dottedNameMap["nohttpinterface"] = nohttpinterface;
+        dottedNameMap["objcheck"] = objcheck;
+        dottedNameMap["noobjcheck"] = noobjcheck;
+        dottedNameMap["net.wireObjectCheck"] = net_wireObjectCheck;
+        dottedNameMap["systemLog.traceAllExceptions"] = systemLog_traceAllExceptions;
+        dottedNameMap["enableExperimentalIndexStatsCmd"] = enableExperimentalIndexStatsCmd;
+        dottedNameMap["enableExperimentalStorageDetailsCmd"] = enableExperimentalStorageDetailsCmd;
+        dottedNameMap["auth"] = auth;
+        dottedNameMap["noauth"] = noauth;
+        dottedNameMap["security.authentication"] = security_authentication;
+        dottedNameMap["security.authSchemaVersion"] = security_authSchemaVersion;
+        dottedNameMap["security.authenticationMechanisms"] = security_authenticationMechanisms;
+        dottedNameMap["security.enableLocalhostAuthBypass"] = security_enableLocalhostAuthBypass;
+        dottedNameMap["security.supportCompatibilityFormPrivilegeDocuments"] = security_supportCompatibilityFormPrivilegeDocuments;
+        dottedNameMap["net.ipv6"] = net_ipv6;
+        dottedNameMap["diaglog"] = diaglog;
+        dottedNameMap["operationProfiling.slowOpThresholdMs"] = operationProfiling_slowOpThresholdMs;
+        dottedNameMap["profile"] = profile;
+        dottedNameMap["operationProfiling.mode"] = operationProfiling_mode;
+        dottedNameMap["cpu"] = cpu;
+        dottedNameMap["sysinfo"] = sysinfo;
+        dottedNameMap["storage.dbPath"] = storage_dbPath;
+        dottedNameMap["storage.directoryPerDB"] = storage_directoryPerDB;
+        dottedNameMap["noIndexBuildRetry"] = noIndexBuildRetry;
+        dottedNameMap["storage.indexBuildRetry"] = storage_indexBuildRetry;
+        dottedNameMap["noprealloc"] = noprealloc;
+        dottedNameMap["storage.preallocDataFiles"] = storage_preallocDataFiles;
+        dottedNameMap["storage.nsSize"] = storage_nsSize;
+        dottedNameMap["storage.quota.enforced"] = storage_quota_enforced;
+        dottedNameMap["storage.quota.maxFilesPerDB"] = storage_quota_maxFilesPerDB;
+        dottedNameMap["storage.smallFiles"] = storage_smallFiles;
+        dottedNameMap["storage.syncPeriodSecs"] = storage_syncPeriodSecs;
+        dottedNameMap["upgrade"] = upgrade;
+        dottedNameMap["repair"] = repair;
+        dottedNameMap["storage.repairPath"] = storage_repairPath;
+        dottedNameMap["noscripting"] = noscripting;
+        dottedNameMap["notablescan"] = notablescan;
+        dottedNameMap["journal"] = journal;
+        dottedNameMap["nojournal"] = nojournal;
+        dottedNameMap["dur"] = dur;
+        dottedNameMap["nodur"] = nodur;
+        dottedNameMap["storage.journal.enabled"] = storage_journal_enabled;
+        dottedNameMap["storage.journal.debugFlags"] = storage_journal_debugFlags;
+        dottedNameMap["durOptions"] = durOptions;
+        dottedNameMap["storage.journal.commitIntervalMs"] = storage_journal_commitIntervalMs;
+        dottedNameMap["replication.oplogSizeMB"] = replication_oplogSizeMB;
+        dottedNameMap["master"] = masterSlave_master;
+        dottedNameMap["slave"] = masterSlave_slave;
+        dottedNameMap["source"] = masterSlave_source;
+        dottedNameMap["only"] = masterSlave_only;
+        dottedNameMap["slavedelay"] = masterSlave_slavedelay;
+        dottedNameMap["autoresync"] = masterSlave_autoresync;
+        dottedNameMap["replication.replSet"] = replication_replSet;
+        dottedNameMap["replication.replSetName"] = replication_replSetName;
+        dottedNameMap["replication.secondaryIndexPrefetch"] = replication_secondaryIndexPrefetch;
+        dottedNameMap["sharding.configsvr"] = sharding_configsvr;
+        dottedNameMap["sharding.shardsvr"] = sharding_shardsvr;
+        dottedNameMap["sharding.clusterRole"] = sharding_clusterRole;
+        dottedNameMap["sharding.noMoveParanoia"] = sharding_noMoveParanoia;
+        dottedNameMap["sharding.archiveMovedChunks"] = sharding_archiveMovedChunks;
+        dottedNameMap["auditLog.log"] = auditLog_log;
+        dottedNameMap["auditLog.format"] = auditLog_format;
+        dottedNameMap["auditLog.destination"] = auditLog_destination;
+        dottedNameMap["auditLog.path"] = auditLog_path;
+        dottedNameMap["auditLog.filter"] = auditLog_filter;
+        dottedNameMap["snmp.subagent"] = snmp_subagent;
+        dottedNameMap["snmp.master"] = snmp_master;
+        dottedNameMap["net.ssl.sslOnNormalPorts"] = net_ssl_sslOnNormalPorts;
+        dottedNameMap["net.ssl.mode"] = net_ssl_mode;
+        dottedNameMap["net.ssl.PEMKeyFile"] = net_ssl_PEMKeyFile;
+        dottedNameMap["net.ssl.PEMKeyPassword"] = net_ssl_PEMKeyPassword;
+        dottedNameMap["net.ssl.clusterFile"] = net_ssl_clusterFile;
+        dottedNameMap["net.ssl.clusterPassword"] = net_ssl_clusterPassword;
+        dottedNameMap["net.ssl.CAFile"] = net_ssl_CAFile;
+        dottedNameMap["net.ssl.CRLFile"] = net_ssl_CRLFile;
+        dottedNameMap["net.ssl.weakCertificateValidation"] = net_ssl_weakCertificateValidation;
+        dottedNameMap["net.ssl.allowInvalidCertificates"] = net_ssl_allowInvalidCertificates;
+        dottedNameMap["net.ssl.FIPSMode"] = net_ssl_FIPSMode;
+        dottedNameMap["install"] = install;
+        dottedNameMap["remove"] = remove;
+        dottedNameMap["reinstall"] = reinstall;
+        dottedNameMap["processManagement.windowsService.serviceName"] = processManagement_windowsService_serviceName;
+        dottedNameMap["processManagement.windowsService.displayName"] = processManagement_windowsService_displayName;
+        dottedNameMap["processManagement.windowsService.description"] = processManagement_windowsService_description;
+        dottedNameMap["processManagement.windowsService.serviceUser"] = processManagement_windowsService_serviceUser;
+        dottedNameMap["processManagement.windowsService.servicePassword"] = processManagement_windowsService_servicePassword;
+        dottedNameMap["service"] = service;
+        dottedNameMap["shutdown"] = shutdown;
+
+        for (std::vector<moe::OptionDescription>::const_iterator iterator = options_vector.begin();
+             iterator != options_vector.end(); iterator++) {
+
+            switch (dottedNameMap[iterator->_dottedName])
+            {
+            case nopreallocj:
+                ASSERT_EQUALS(iterator->_singleName, "nopreallocj");
+                ASSERT_EQUALS(iterator->_type, moe::Switch);
+                ASSERT_EQUALS(iterator->_description, "don't preallocate journal files");
+                ASSERT_EQUALS(iterator->_isVisible, false);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case fastsync:
                 ASSERT_EQUALS(iterator->_singleName, "fastsync");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
                 ASSERT_EQUALS(iterator->_description, "indicate that this instance is starting from a dbpath snapshot of the repl peer");
@@ -192,8 +486,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_description, "be more verbose (include multiple times for more verbosity e.g. -vvvvv)");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
-                moe::Value implicitVal(std::string("v"));
-                ASSERT_TRUE(iterator->_implicit.equal(implicitVal));
+                ASSERT_TRUE(iterator->_implicit.equal(moe::Value(std::string("v"))));
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
             }
@@ -311,6 +604,42 @@ namespace {
                 ASSERT_EQUALS(iterator->_singleName, "httpinterface");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
                 ASSERT_EQUALS(iterator->_description, "enable http interface");
+                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case net_http_enabled:
+                ASSERT_EQUALS(iterator->_singleName, "");
+                ASSERT_EQUALS(iterator->_type, moe::Bool);
+                ASSERT_EQUALS(iterator->_description, "enable http interface");
+                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceYAMLConfig);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case net_http_port:
+                ASSERT_EQUALS(iterator->_singleName, "");
+                ASSERT_EQUALS(iterator->_type, moe::Switch);
+                ASSERT_EQUALS(iterator->_description, "port to listen on for http interface");
+                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceYAMLConfig);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case net_http_RESTInterfaceEnabled:
+                ASSERT_EQUALS(iterator->_singleName, "rest");
+                ASSERT_EQUALS(iterator->_type, moe::Switch);
+                ASSERT_EQUALS(iterator->_description, "turn on simple rest api");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -550,7 +879,7 @@ namespace {
             else if (iterator->_dottedName == "cpu") {
                 ASSERT_EQUALS(iterator->_singleName, "cpu");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "periodically show cpu and iowait utilization");
+                ASSERT_EQUALS(iterator->_description, "run without security");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -560,18 +889,9 @@ namespace {
             else if (iterator->_dottedName == "dbpath") {
                 ASSERT_EQUALS(iterator->_singleName, "dbpath");
                 ASSERT_EQUALS(iterator->_type, moe::String);
-#ifdef _WIN32
-                ASSERT_EQUALS(iterator->_description, "directory for datafiles - defaults to \\data\\db\\");
-#else
-                ASSERT_EQUALS(iterator->_description, "directory for datafiles - defaults to /data/db/");
-#endif
+                ASSERT_EQUALS(iterator->_description, "How the database behaves with respect to authentication of clients.  Options are \"optional\", which means that a client can connect with or without authentication, and \"required\" which means clients must use authentication");
                 ASSERT_EQUALS(iterator->_isVisible, true);
-#ifdef _WIN32
-                moe::Value defaultVal(std::string("\\data\\db\\"));
-#else
-                moe::Value defaultVal(std::string("/data/db"));
-#endif
-                ASSERT_TRUE(iterator->_default.equal(defaultVal));
+                ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -629,9 +949,21 @@ namespace {
             else if (iterator->_dottedName == "journalOptions") {
                 ASSERT_EQUALS(iterator->_singleName, "journalOptions");
                 ASSERT_EQUALS(iterator->_type, moe::Int);
-                ASSERT_EQUALS(iterator->_description, "journal diagnostic options");
-                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_EQUALS(iterator->_description, "DEPRECATED: 0=off 1=W 2=R 3=both 7=W+some reads");
+                ASSERT_EQUALS(iterator->_isVisible, false);
                 ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case operationProfiling_slowOpThresholdMs:
+                ASSERT_EQUALS(iterator->_singleName, "slowms");
+                ASSERT_EQUALS(iterator->_type, moe::Int);
+                ASSERT_EQUALS(iterator->_description, "value of slow for profile and console log");
+                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_TRUE(iterator->_default.equal(moe::Value(100)));
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -659,7 +991,7 @@ namespace {
             else if (iterator->_dottedName == "noIndexBuildRetry") {
                 ASSERT_EQUALS(iterator->_singleName, "noIndexBuildRetry");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "don't retry any index builds that were interrupted by shutdown");
+                ASSERT_EQUALS(iterator->_description, "periodically show cpu and iowait utilization");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -669,9 +1001,29 @@ namespace {
             else if (iterator->_dottedName == "nojournal") {
                 ASSERT_EQUALS(iterator->_singleName, "nojournal");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "disable journaling (journaling is on by default for 64 bit)");
+                ASSERT_EQUALS(iterator->_description, "print some diagnostic system information");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case storage_dbPath:
+                ASSERT_EQUALS(iterator->_singleName, "dbpath");
+                ASSERT_EQUALS(iterator->_type, moe::String);
+#ifdef _WIN32
+                ASSERT_EQUALS(iterator->_description, "directory for datafiles - defaults to \\data\\db\\");
+#else
+                ASSERT_EQUALS(iterator->_description, "directory for datafiles - defaults to /data/db/");
+#endif
+                ASSERT_EQUALS(iterator->_isVisible, true);
+#ifdef _WIN32
+                ASSERT_TRUE(iterator->_default.equal(moe::Value(std::string("\\data\\db\\"))));
+#else
+                ASSERT_TRUE(iterator->_default.equal(moe::Value(std::string("/data/db"))));
+#endif
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -679,7 +1031,7 @@ namespace {
             else if (iterator->_dottedName == "noprealloc") {
                 ASSERT_EQUALS(iterator->_singleName, "noprealloc");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "disable data file preallocation - will often hurt performance");
+                ASSERT_EQUALS(iterator->_description, "each database will be stored in a separate directory");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -689,7 +1041,7 @@ namespace {
             else if (iterator->_dottedName == "noscripting") {
                 ASSERT_EQUALS(iterator->_singleName, "noscripting");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "disable scripting engine");
+                ASSERT_EQUALS(iterator->_description, "don't retry any index builds that were interrupted by shutdown");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -699,7 +1051,7 @@ namespace {
             else if (iterator->_dottedName == "notablescan") {
                 ASSERT_EQUALS(iterator->_singleName, "notablescan");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "do not allow table scans");
+                ASSERT_EQUALS(iterator->_description, "disable data file preallocation - will often hurt performance");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -711,8 +1063,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_type, moe::Int);
                 ASSERT_EQUALS(iterator->_description, ".ns file size (in MB) for new databases");
                 ASSERT_EQUALS(iterator->_isVisible, true);
-                moe::Value defaultVal(16);
-                ASSERT_TRUE(iterator->_default.equal(defaultVal));
+                ASSERT_TRUE(iterator->_default.equal(moe::Value(16)));
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -720,7 +1071,7 @@ namespace {
             else if (iterator->_dottedName == "profile") {
                 ASSERT_EQUALS(iterator->_singleName, "profile");
                 ASSERT_EQUALS(iterator->_type, moe::Int);
-                ASSERT_EQUALS(iterator->_description, "0=off 1=slow, 2=all");
+                ASSERT_EQUALS(iterator->_description, "number of files allowed per db, implies --quota");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -730,7 +1081,7 @@ namespace {
             else if (iterator->_dottedName == "quota") {
                 ASSERT_EQUALS(iterator->_singleName, "quota");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "limits each database to a certain number of files (8 default)");
+                ASSERT_EQUALS(iterator->_description, "use a smaller default file size");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -742,7 +1093,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_type, moe::Int);
                 ASSERT_EQUALS(iterator->_description, "number of files allowed per db, requires --quota");
                 ASSERT_EQUALS(iterator->_isVisible, true);
-                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_default.equal(moe::Value(60.0)));
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -770,7 +1121,7 @@ namespace {
             else if (iterator->_dottedName == "rest") {
                 ASSERT_EQUALS(iterator->_singleName, "rest");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "turn on simple rest api");
+                ASSERT_EQUALS(iterator->_description, "disable scripting engine");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -782,8 +1133,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_type, moe::Int);
                 ASSERT_EQUALS(iterator->_description, "value of slow for profile and console log");
                 ASSERT_EQUALS(iterator->_isVisible, true);
-                moe::Value defaultVal(100);
-                ASSERT_TRUE(iterator->_default.equal(defaultVal));
+                ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -791,7 +1141,7 @@ namespace {
             else if (iterator->_dottedName == "smallfiles") {
                 ASSERT_EQUALS(iterator->_singleName, "smallfiles");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "use a smaller default file size");
+                ASSERT_EQUALS(iterator->_description, "enable journaling");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -803,8 +1153,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_type, moe::Double);
                 ASSERT_EQUALS(iterator->_description, "seconds between disk syncs (0=never, but not recommended)");
                 ASSERT_EQUALS(iterator->_isVisible, true);
-                moe::Value defaultVal(60.0);
-                ASSERT_TRUE(iterator->_default.equal(defaultVal));
+                ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
@@ -812,7 +1161,43 @@ namespace {
             else if (iterator->_dottedName == "sysinfo") {
                 ASSERT_EQUALS(iterator->_singleName, "sysinfo");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
-                ASSERT_EQUALS(iterator->_description, "print some diagnostic system information");
+                ASSERT_EQUALS(iterator->_description, "enable journaling");
+                ASSERT_EQUALS(iterator->_isVisible, false);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case nodur:
+                ASSERT_EQUALS(iterator->_singleName, "nodur");
+                ASSERT_EQUALS(iterator->_type, moe::Switch);
+                ASSERT_EQUALS(iterator->_description, "disable journaling");
+                ASSERT_EQUALS(iterator->_isVisible, false);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceAllLegacy);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case storage_journal_enabled:
+                ASSERT_EQUALS(iterator->_singleName, "");
+                ASSERT_EQUALS(iterator->_type, moe::Bool);
+                ASSERT_EQUALS(iterator->_description, "enable journaling");
+                ASSERT_EQUALS(iterator->_isVisible, true);
+                ASSERT_TRUE(iterator->_default.isEmpty());
+                ASSERT_TRUE(iterator->_implicit.isEmpty());
+                ASSERT_EQUALS(iterator->_isComposing, false);
+                ASSERT_EQUALS(iterator->_sources, moe::SourceYAMLConfig);
+                ASSERT_EQUALS(iterator->_positionalStart, -1);
+                ASSERT_EQUALS(iterator->_positionalEnd, -1);
+                break;
+            case storage_journal_debugFlags:
+                ASSERT_EQUALS(iterator->_singleName, "journalOptions");
+                ASSERT_EQUALS(iterator->_type, moe::Int);
+                ASSERT_EQUALS(iterator->_description, "journal diagnostic options");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -960,7 +1345,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
             }
 #ifdef MONGO_SSL
-            else if (iterator->_dottedName == "ssl.sslOnNormalPorts") {
+            case net_ssl_sslOnNormalPorts:
                 ASSERT_EQUALS(iterator->_singleName, "sslOnNormalPorts");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
                 ASSERT_EQUALS(iterator->_description, "use ssl on configured ports");
@@ -973,7 +1358,7 @@ namespace {
             else if (iterator->_dottedName == "ssl.mode") {
                 ASSERT_EQUALS(iterator->_singleName, "sslMode");
                 ASSERT_EQUALS(iterator->_type, moe::String);
-                ASSERT_EQUALS(iterator->_description, "set the SSL operation mode (disabled|allowSSL|preferSSL|requireSSL)");
+                ASSERT_EQUALS(iterator->_description, "set the SSL operation mode (noSSL|acceptSSL|sendAcceptSSL|sslOnly)");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
                 ASSERT_TRUE(iterator->_implicit.isEmpty());
@@ -996,8 +1381,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_description, "PEM file password");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
-                moe::Value implicitVal(std::string(""));
-                ASSERT_TRUE(iterator->_implicit.equal(implicitVal));
+                ASSERT_TRUE(iterator->_implicit.equal(moe::Value(std::string(""))));
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
             }
@@ -1017,8 +1401,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_description, "Internal authentication key file password");
                 ASSERT_EQUALS(iterator->_isVisible, true);
                 ASSERT_TRUE(iterator->_default.isEmpty());
-                moe::Value implicitVal(std::string(""));
-                ASSERT_TRUE(iterator->_implicit.equal(implicitVal));
+                ASSERT_TRUE(iterator->_implicit.equal(moe::Value(std::string(""))));
                 ASSERT_EQUALS(iterator->_isComposing, false);
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
             }
@@ -1063,8 +1446,8 @@ namespace {
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
                 ASSERT_EQUALS(iterator->_positionalStart, -1);
                 ASSERT_EQUALS(iterator->_positionalEnd, -1);
-            }
-            else if (iterator->_dottedName == "ssl.FIPSMode") {
+                break;
+            case net_ssl_FIPSMode:
                 ASSERT_EQUALS(iterator->_singleName, "sslFIPSMode");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
                 ASSERT_EQUALS(iterator->_description, "activate FIPS 140-2 mode at startup");
@@ -1076,7 +1459,7 @@ namespace {
             }
 #endif
 #ifdef _WIN32
-            else if (iterator->_dottedName == "install") {
+            case install:
                 ASSERT_EQUALS(iterator->_singleName, "install");
                 ASSERT_EQUALS(iterator->_type, moe::Switch);
                 ASSERT_EQUALS(iterator->_description, "install Windows service");
@@ -1167,7 +1550,7 @@ namespace {
                 ASSERT_EQUALS(iterator->_sources, moe::SourceAll);
             }
 #endif
-            else {
+            default:
                 ::mongo::StringBuilder sb;
                 sb << "Found extra option: " << iterator->_dottedName <<
                       " which we did not register";
