@@ -67,7 +67,6 @@ namespace mongo {
         ~SSLThreadInfo() {}
 
             ~SSLThreadInfo() {
-                CRYPTO_set_id_callback(0);
             }
 
             unsigned long id() const { return _id; }
@@ -385,6 +384,10 @@ namespace mongo {
         // so that encryption/decryption is backwards compatible
         OpenSSL_add_all_algorithms();
  
+        // Setup OpenSSL multithreading callbacks
+        CRYPTO_set_id_callback(_ssl_id_callback);
+        CRYPTO_set_locking_callback(_ssl_locking_callback);
+ 
         SSLThreadInfo::init();
         SSLThreadInfo::get();
 
@@ -441,6 +444,7 @@ namespace mongo {
     }
 
     SSLManager::~SSLManager() {
+        CRYPTO_set_id_callback(0);
         ERR_free_strings();
         EVP_cleanup();
 
