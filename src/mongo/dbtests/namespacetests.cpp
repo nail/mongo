@@ -33,30 +33,53 @@ namespace NamespaceTests {
 
     namespace IndexDetailsTests {
         class Base {
-            Lock::GlobalWrite lk;
-            Client::Context _context;
-            shared_ptr<IndexDetailsBase> _idx;
         public:
-            IndexDetailsBase &idx() { return *_idx; }
-            Base() : lk(mongo::unittest::EMPTY_STRING), _context(ns()), _idx() {
+            Base() {
             }
             virtual ~Base() {
             }
         protected:
             void create( bool sparse = false ) {
-                Collection* collection = _context.db()->getCollection( ns() );
-                if ( collection )
-                    collection->infoCache()->reset();
+
                 BSONObjBuilder builder;
                 builder.append( "ns", ns() );
                 builder.append( "name", "testIndex" );
                 builder.append( "key", key() );
-                builder.append( "sparse", isSparse() );
-                return builder.obj();
+                builder.append( "sparse", sparse );
+
+                BSONObj bobj = builder.done();
+
+                _index.reset( new IndexDescriptor( NULL, -1, NULL, bobj ) );
+
+                _keyPattern = key().getOwned();
+
+                // The key generation wants these values.
+                vector<const char*> fieldNames;
+                vector<BSONElement> fixed;
+
+                BSONObjIterator it(_keyPattern);
+                while (it.more()) {
+                    BSONElement elt = it.next();
+                    fieldNames.push_back(elt.fieldName());
+                    fixed.push_back(BSONElement());
+                }
+
+                _keyGen.reset(new BtreeKeyGeneratorV1(fieldNames, fixed, sparse));
             }
+
             static const char* ns() {
                 return "unittests.indexdetailstests";
             }
+
+            IndexDescriptor* id() {
+                return _index.get();
+            }
+
+            // TODO: This is testing Btree key creation, not IndexDetails.
+            void getKeysFromObject(const BSONObj& obj, BSONObjSet& out) {
+                _keyGen->getKeys(obj, &out);
+            }
+
             virtual BSONObj key() const {
                 BSONObjBuilder k;
                 k.append( "a", 1 );
@@ -103,6 +126,21 @@ namespace NamespaceTests {
                 BSONObjBuilder b;
                 b.appendNull( "" );
                 return b.obj();
+            }
+        private:
+            scoped_ptr<BtreeKeyGenerator> _keyGen;
+            BSONObj _keyPattern;
+            scoped_ptr<IndexDescriptor> _index;
+
+        };
+
+        class Create : public Base {
+        public:
+            void run() {
+                create();
+                ASSERT_EQUALS( "testIndex", id()->indexName() );
+                ASSERT_EQUALS( ns(), id()->parentNS() );
+                assertEquals( key(), id()->keyPattern() );
             }
         };
 

@@ -131,8 +131,89 @@ namespace mongo {
                 break;
             }
         }
-        return nDeleted;
-    }
+        else {
+            shared_ptr< Cursor > creal = getOptimizedCursor( ns, pattern );
+
+            if( !creal->ok() )
+                return nDeleted;
+
+            shared_ptr< Cursor > cPtr = creal;
+            auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout, cPtr, ns) );
+            cc->setDoingDeletes( true );
+
+            CursorId id = cc->cursorid();
+
+            bool canYield = !god && !(creal->matcher() && creal->matcher()->docMatcher().atomic());
+
+            do {
+                // TODO: we can generalize this I believe
+                //       
+                bool willNeedRecord = (creal->matcher() && creal->matcher()->needRecord()) || pattern.isEmpty() || isSimpleIdQuery( pattern );
+                if ( ! willNeedRecord ) {
+                    // TODO: this is a total hack right now
+                    // check if the index full encompasses query
+
+                    if ( pattern.nFields() == 1 && 
+                            str::equals( pattern.firstElement().fieldName() , creal->indexKeyPattern().firstElement().fieldName() ) )
+                        willNeedRecord = true;
+                }
+
+                if ( canYield && ! cc->yieldSometimes( willNeedRecord ? ClientCursor::WillNeed : ClientCursor::MaybeCovered ) ) {
+                    cc.release(); // has already been deleted elsewhere
+                    // TODO should we assert or something?
+                    break;
+                }
+                if ( !cc->ok() ) {
+                    break; // if we yielded, could have hit the end
+                }
+
+                // this way we can avoid calling prepareToYield() every time (expensive)
+                // as well as some other nuances handled
+                cc->setDoingDeletes( true );
+
+                DiskLoc rloc = cc->currLoc();
+                BSONObj key = cc->currKey();
+
+                bool match = creal->currentMatches();
+
+                cc->advance();
+
+                if ( ! match )
+                    continue;
+
+                // SERVER-5198 Advance past the document to be modified, but see SERVER-5725.
+                while( cc->ok() && rloc == cc->currLoc() ) {
+                    cc->advance();
+                }
+
+                bool foundAllResults = ( justOne || !cc->ok() );
+
+                if ( !foundAllResults ) {
+                    // NOTE: Saving and restoring a btree cursor's position was historically described
+                    // as slow here.
+                    cc->c()->prepareToTouchEarlierIterate();
+                }
+
+                if ( logop ) {
+                    BSONElement e;
+                    if( BSONObj::make( rloc.rec() ).getObjectID( e ) ) {
+                        BSONObjBuilder b;
+                        b.append( e );
+                        bool replJustOne = true;
+                        logOp( "d", nsForLogOp.c_str(), b.done(), 0, &replJustOne );
+                    }
+                    else {
+                        problem() << "deleted object without id, not logging" << endl;
+                    }
+                }
+
+                currentClient.get()->database()->getCollection( ns )->deleteDocument( rloc );
+
+                nDeleted++;
+                if ( foundAllResults ) {
+                    break;
+                }
+                cc->c()->recoverFromTouchingEarlierIterate();
 
     /* ns:      namespace, e.g. <database>.<collection>
        pattern: the "where" clause / criteria
