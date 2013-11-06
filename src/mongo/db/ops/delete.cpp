@@ -69,10 +69,14 @@ namespace mongo {
         return nDeleted;
     }
 
-    long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        Collection *cl = getCollection(ns);
-        if (cl == NULL) {
-            return 0;
+        {
+            NamespaceDetails *d = nsdetails( ns );
+            if (NULL == d) {
+                return 0;
+            }
+            uassert(10101,
+                    str::stream() << "can't remove from a capped collection: " << ns,
+                    !d->isCapped());
         }
 
         uassert(10101, "can't remove from a capped collection", !cl->isCapped());
