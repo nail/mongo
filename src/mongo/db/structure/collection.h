@@ -49,6 +49,8 @@ namespace mongo {
     class FlatIterator;
     class CappedIterator;
 
+    class OpDebug;
+
     /**
      * this is NOT safe through a yield right now
      * not sure if it will be, or what yet
@@ -73,6 +75,8 @@ namespace mongo {
 
         BSONObj docFor( const DiskLoc& loc );
 
+        // ---- things that should move to a CollectionAccessMethod like thing
+
         CollectionIterator* getIterator( const DiskLoc& start, bool tailable,
                                          const CollectionScanParams::Direction& dir) const;
 
@@ -80,6 +84,25 @@ namespace mongo {
                              bool cappedOK = false,
                              bool noWarn = false,
                              BSONObj* deletedId = 0 );
+
+        /**
+         * this does NOT modify the doc before inserting
+         * i.e. will not add an _id field for documents that are missing it
+         */
+        StatusWith<DiskLoc> insertDocument( const BSONObj& doc, bool enforceQuota );
+
+        /**
+         * updates the document @ oldLocation with newDoc
+         * if the document fits in the old space, it is put there
+         * if not, it is moved
+         * @return the post update location of the doc (may or may not be the same as oldLocation)
+         */
+        StatusWith<DiskLoc> updateDocument( const DiskLoc& oldLocation,
+                                            const BSONObj& newDoc,
+                                            bool enforceQuota,
+                                            OpDebug* debug );
+
+        // -----------
 
         // this is temporary, moving up from DB for now
         // this will add a new extent the collection

@@ -233,7 +233,6 @@ namespace mongo {
             }
 
             // Let's fetch the next candidate object for this update.
-            Record* record = cursor->_current();
             DiskLoc loc = cursor->currLoc();
             const BSONObj oldObj = loc.obj();
 
@@ -365,13 +364,12 @@ namespace mongo {
 
                 // The updates were not in place. Apply them through the file manager.
                 newObj = doc.getObject();
-                DiskLoc newLoc = theDataFileMgr.updateRecord(nsString.ns().c_str(),
-                                                             collection,
-                                                             record,
-                                                             loc,
-                                                             newObj.objdata(),
-                                                             newObj.objsize(),
-                                                             *opDebug);
+                StatusWith<DiskLoc> res = collection->updateDocument( loc,
+                                                                      newObj,
+                                                                      true,
+                                                                      opDebug );
+                uassertStatusOK( res.getStatus() );
+                DiskLoc newLoc = res.getValue();
 
                 // If we've moved this object to a new location, make sure we don't apply
                 // that update again if our traversal picks the objecta again.
