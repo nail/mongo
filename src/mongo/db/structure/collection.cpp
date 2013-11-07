@@ -76,6 +76,70 @@ namespace mongo {
         return BSONObj::make( rec->accessed() );
     }
 
+    StatusWith<DiskLoc> Collection::insertDocument( const BSONObj& docToInsert, bool enforceQuota ) {
+
+        if ( _indexCatalog.findIdIndex() ) {
+            if ( docToInsert["_id"].eoo() ) {
+                return StatusWith<DiskLoc>( ErrorCodes::InternalError,
+                                            "Collection::insertDocument got document without _id" );
+            }
+        }
+
+        int lenWHdr = _details->getRecordAllocationSize( docToInsert.objsize() + Record::HeaderSize );
+        fassert( 17208, lenWHdr >= ( docToInsert.objsize() + Record::HeaderSize ) );
+
+        if ( _details->isCapped() ) {
+            // TOOD: old god not done
+            Status ret = _indexCatalog.checkNoIndexConflicts( docToInsert );
+            if ( !ret.isOK() )
+                return StatusWith<DiskLoc>( ret );
+        }
+
+        // TODO: for now, capped logic lives inside NamespaceDetails, which is hidden
+        //       under the RecordStore, this feels broken since that should be a
+        //       collection access method probably
+        StatusWith<DiskLoc> loc = _recordStore.allocRecord( lenWHdr,
+                                                            enforceQuota ? largestFileNumberInQuota() : 0 );
+        if ( !loc.isOK() )
+            return loc;
+
+        Record *r = loc.getValue().rec();
+        fassert( 17210, r->lengthWithHeaders() >= lenWHdr );
+
+        // copy the data
+        r = reinterpret_cast<Record*>( getDur().writingPtr(r, lenWHdr) );
+        memcpy( r->data(), docToInsert.objdata(), docToInsert.objsize() );
+
+        addRecordToRecListInExtent(r, loc.getValue()); // XXX move down into record store
+
+        _details->incrementStats( r->netLength(), 1 );
+
+        // TOOD: old god not done
+        _infoCache.notifyOfWriteOp();
+
+        try {
+            _indexCatalog.indexRecord( docToInsert, loc.getValue() );
+        }
+        catch( AssertionException& e ) {
+            if ( _details->isCapped() ) {
+                return StatusWith<DiskLoc>( ErrorCodes::InternalError,
+                                            str::stream() << "unexpected index insertion failure on"
+                                            << " capped collection" << e.toString()
+                                            << " - collection and its index will not match" );
+            }
+
+            // normal case -- we can roll back
+            deleteDocument( loc.getValue(), false, true, NULL );
+            throw;
+        }
+
+        // TODO: this is what the old code did, but is it correct?
+        _details->paddingFits();
+
+        return loc;
+
+    }
+
     void Collection::deleteDocument( const DiskLoc& loc, bool cappedOK, bool noWarn,
                                          BSONObj* deletedId ) {
         if ( _details->isCapped() && !cappedOK ) {
