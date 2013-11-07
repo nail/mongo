@@ -21,6 +21,7 @@
 #include "mongo/db/cloner.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_request.h"
+#include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/repl/rs.h"
@@ -558,6 +559,8 @@ namespace mongo {
                     request.setUpdates(i->second);
                     request.setGod();
                     request.setUpsert();
+                    UpdateLifecycleImpl updateLifecycle(true, requestNs);
+                    request.setLifecycle(&updateLifecycle);
 
                     update(request, &debug);
 

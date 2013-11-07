@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2013 10gen Inc.
+ *    Copyright (C) 2013 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,32 +28,37 @@
 
 #pragma once
 
-#include "mongo/base/status.h"
+#include "mongo/db/field_ref.h"
+#include "mongo/db/structure/collection.h"
+#include "mongo/s/chunk_version.h"
 
 namespace mongo {
 
-    class FieldRef;
+    class UpdateLifecycle {
+    public:
 
-    namespace fieldchecker {
-
-        /**
-         * Returns OK if all the below conditions on 'field' are valid:
-         *   + Non-empty
-         *   + Does not start or end with a '.'
-         * Otherwise returns a code indicating cause of failure.
-         */
-        Status isUpdatable(const FieldRef& field);
+        virtual ~UpdateLifecycle() {}
 
         /**
-         * Returns true, the position 'pos' of the first $-sign if present in 'fieldRef', and
-         * how many other $-signs were found in 'count'. Otherwise return false.
+         * Can the update continue?
          *
-         * Note:
-         *   isPositional assumes that the field is updatable. Call isUpdatable() above to
-         *   verify.
+         * The (only) implementation will check the following:
+         *  1.) Collection still exists
+         *  2.) Shard version has not changed (indicating that the query/update is not valid
          */
-        bool isPositional(const FieldRef& fieldRef, size_t* pos, size_t* count = NULL);
+        virtual const bool canContinue() const = 0;
 
-    } // namespace fieldchecker
+        /**
+         * Set the out parameter if there is a collection and it has indexes
+         */
+        virtual const void getIndexKeys(IndexPathSet* returnedIndexPathSet) const = 0;
+
+        /**
+         * Returns the shard keys as immutable fields
+         * Immutable fields in this case mean that they are required to exist, cannot change values
+         * and must not be multi-valued (in an array, or an array)
+         */
+        virtual const std::vector<FieldRef*>* getImmutableFields() const = 0;
+    };
 
 } // namespace mongo

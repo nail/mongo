@@ -447,6 +447,9 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/compact.cpp",
                     "db/dbcommands_admin.cpp",
                     "db/write_concern.cpp",
+                    "db/startup_warnings.cpp",
+                    "db/storage_options.cpp",
+                    "db/ops/update_lifecycle_impl.cpp",
 
                     # most commands are only for mongod
                     "db/dbcommands.cpp",

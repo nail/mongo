@@ -2185,6 +2185,12 @@ namespace mutablebson {
         return Element(this, impl.insertLeafElement(leafRef));
     }
 
+    Element Document::makeElementNewOID(const StringData& fieldName) {
+        OID newOID;
+        newOID.init();
+        return makeElementOID(fieldName, newOID);
+    }
+
     Element Document::makeElementOID(const StringData& fieldName, const OID value) {
         Impl& impl = getImpl();
         dassert(impl.doesNotAlias(fieldName));

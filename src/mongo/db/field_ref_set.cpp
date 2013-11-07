@@ -17,8 +17,11 @@
 #include "mongo/db/field_ref_set.h"
 
 #include "mongo/util/assert_util.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
+
+    namespace str = mongoutils::str;
 
     namespace {
 
@@ -66,6 +69,19 @@ namespace mongo {
         }
     }
 
+    void FieldRefSet::keepShortest(const FieldRef* toInsert) {
+        const FieldRef* conflict;
+        if ( !insert(toInsert, &conflict) && (toInsert->numParts() < (conflict->numParts()))) {
+            _fieldSet.erase(conflict);
+           keepShortest(toInsert);
+        }
+    }
+
+    void FieldRefSet::fillFrom(const std::vector<FieldRef*>& fields) {
+        dassert(_fieldSet.empty());
+        _fieldSet.insert(fields.begin(), fields.end());
+    }
+
     bool FieldRefSet::insert(const FieldRef* toInsert, const FieldRef** conflict) {
 
         // We can determine if two fields conflict by checking their common prefix.
@@ -104,6 +120,19 @@ namespace mongo {
         _fieldSet.insert(it, toInsert);
         *conflict = NULL;
         return true;
+    }
+
+    const std::string FieldRefSet::toString() const {
+        str::stream res;
+        res << "Fields:[ ";
+        FieldRefSet::const_iterator where = _fieldSet.begin();
+        const FieldRefSet::const_iterator end = _fieldSet.end();
+        for( ; where != end; ++where ) {
+            const FieldRef& current = **where;
+            res << current.dottedField() << ",";
+        }
+        res << "]";
+        return res;
     }
 
 } // namespace mongo

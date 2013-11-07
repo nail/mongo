@@ -26,6 +26,9 @@ namespace mongo {
 
     namespace str = mongoutils::str;
 
+    class FieldRef;
+    class UpdateLifecycle;
+
     class UpdateRequest {
     public:
         inline UpdateRequest(
@@ -36,9 +39,10 @@ namespace mongo {
             , _god(false)
             , _upsert(false)
             , _multi(false)
-            , _updateOpLog(false)
+            , _callLogOp(false)
             , _fromMigration(false)
-            , _fromReplication(false) {}
+            , _fromReplication(false)
+            , _lifecycle(NULL) {}
 
         const NamespaceString& getNamespaceString() const {
             return _nsString;
@@ -92,11 +96,11 @@ namespace mongo {
         }
 
         inline void setUpdateOpLog(bool value = true) {
-            _updateOpLog = value;
+            _callLogOp = value;
         }
 
-        bool shouldUpdateOpLog() const {
-            return _updateOpLog;
+        bool shouldCallLogOp() const {
+            return _callLogOp;
         }
 
         inline void setFromMigration(bool value = true) {
@@ -115,6 +119,14 @@ namespace mongo {
             return _fromReplication;
         }
 
+        inline void setLifecycle(const UpdateLifecycle* value) {
+            _lifecycle = value;
+        }
+
+        inline const UpdateLifecycle* getLifecycle() const {
+            return _lifecycle;
+        }
+
         const std::string toString() const {
             return str::stream()
                         << " query: " << _query
@@ -122,7 +134,7 @@ namespace mongo {
                         << " god: " << _god
                         << " upsert: " << _upsert
                         << " multi: " << _multi
-                        << " logToOplog: " << _updateOpLog
+                        << " callLogOp: " << _callLogOp
                         << " fromMigration: " << _fromMigration
                         << " fromReplications: " << _fromReplication;
         }
@@ -150,13 +162,16 @@ namespace mongo {
         bool _multi;
 
         // True if the effects of the update should be written to the oplog.
-        bool _updateOpLog;
+        bool _callLogOp;
 
         // True if this update is on behalf of a chunk migration.
         bool _fromMigration;
 
         // True if this update is being applied during the application for the oplog.
         bool _fromReplication;
+
+        // The lifecycle data, and events used during the update request.
+        const UpdateLifecycle* _lifecycle;
     };
 
 } // namespace mongo

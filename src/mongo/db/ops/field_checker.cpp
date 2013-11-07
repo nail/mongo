@@ -26,83 +26,26 @@ namespace mongo {
 
 namespace fieldchecker {
 
-    namespace {
+    Status isUpdatable(const FieldRef& field) {
+        const size_t numParts = field.numParts();
 
-        Status isUpdatable(const FieldRef& field, bool legacy) {
-            const size_t numParts = field.numParts();
-
-            if (numParts == 0) {
-                return Status(ErrorCodes::EmptyFieldName,
-                              "An empty update path is not valid.");
-            }
-
-            for (size_t i = 0; i != numParts; ++i) {
-                const StringData part = field.getPart(i);
-
-                if ((i == 0) && part.compare("_id") == 0) {
-                    return Status(ErrorCodes::ImmutableIdField,
-                                  mongoutils::str::stream() << "The update path '"
-                                  << field.dottedField()
-                                  << "' contains the '_id' field, which cannot be updated.");
-                }
-
-                if (part.empty()) {
-                    return Status(ErrorCodes::EmptyFieldName,
-                                  mongoutils::str::stream() << "The update path '"
-                                  << field.dottedField()
-                                  << "' contains an empty field, which is not allowed.");
-                }
-
-                if (!legacy && (part[0] == '$')) {
-
-                    // A 'bare' dollar sign not in the first position is a positional
-                    // update token, so it is not an error.
-                    //
-                    // TODO: In 'isPositional' below, we redo a very similar walk and check.
-                    // Perhaps we should fuse these operations, and have isUpdatable take a
-                    // 'PositionalContext' object to be populated with information about any
-                    // discovered positional ops.
-                    const bool positional = ((i != 0) && (part.size() == 1));
-
-                    if (!positional) {
-
-                        // We ignore the '$'-prefixed names that are part of a DBRef, because
-                        // we don't have enough context here to validate that we have a proper
-                        // DBRef. Errors with the DBRef will be caught upstream when
-                        // okForStorage is invoked.
-                        //
-                        // TODO: We need to find a way to consolidate this checking with that
-                        // done in okForStorage. There is too much duplication between this
-                        // code and that code.
-                        const bool mightBePartOfDbRef = (i != 0) &&
-                                                        (part == "$db" ||
-                                                         part == "$id" ||
-                                                         part == "$ref");
-
-                        if (!mightBePartOfDbRef)
-                            return Status(ErrorCodes::DollarPrefixedFieldName,
-                                          mongoutils::str::stream() << "The update path '"
-                                              << field.dottedField()
-                                              << "' contains an illegal field name "
-                                                      "(field name starts with '$').");
-
-                    }
-
-                }
-
-            }
-
-            return Status::OK();
+        if (numParts == 0) {
+            return Status(ErrorCodes::EmptyFieldName,
+                          "An empty update path is not valid.");
         }
 
-    } // namespace
+        for (size_t i = 0; i != numParts; ++i) {
+            const StringData part = field.getPart(i);
 
-    Status isUpdatable(const FieldRef& field) {
-        return isUpdatable(field, false);
-    }
+            if (part.empty()) {
+                return Status(ErrorCodes::EmptyFieldName,
+                              mongoutils::str::stream() << "The update path '"
+                              << field.dottedField()
+                              << "' contains an empty field, which is not allowed.");
+            }
+        }
 
-    Status isUpdatableLegacy(const FieldRef& field) {
-        return isUpdatable(field, true);
+        return Status::OK();
     }
 
     bool isPositional(const FieldRef& fieldRef, size_t* pos, size_t* count) {

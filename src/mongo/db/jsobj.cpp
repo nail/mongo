@@ -876,8 +876,11 @@ namespace mongo {
         return b.obj();
     }
 
-    bool BSONObj::okForStorage() const {
+    Status BSONObj::_okForStorage(bool root, bool deep) const {
         BSONObjIterator i( *this );
+
+        // The first field is special in the case of a DBRef where the first field must be $ref
+        bool first = true;
         while ( i.more() ) {
             BSONElement e = i.next();
             const char * name = e.fieldName();
@@ -906,22 +909,33 @@ namespace mongo {
                                             << typeName(e.type()));
             }
 
-            if ( e.mayEncapsulate() ) {
+            if ( deep && e.mayEncapsulate() ) {
                 switch ( e.type() ) {
                 case Object:
                 case Array:
-                    if ( ! e.embeddedObject().okForStorage() )
-                        return false;
+                    {
+                        Status s = e.embeddedObject()._okForStorage(false, true);
+                        // TODO: combine field names for better error messages
+                        if ( ! s.isOK() )
+                            return s;
+                    }
                     break;
                 case CodeWScope:
-                    if ( ! e.codeWScopeObject().okForStorage() )
-                        return false;
+                    {
+                        Status s = e.codeWScopeObject()._okForStorage(false, true);
+                        // TODO: combine field names for better error messages
+                        if ( ! s.isOK() )
+                            return s;
+                    }
                     break;
                 default:
                     uassert( 12579, "unhandled cases in BSONObj okForStorage" , 0 );
                 }
 
             }
+
+            // After we have processed one field, we are no longer on the first field
+            first = false;
         }
         return true;
     }

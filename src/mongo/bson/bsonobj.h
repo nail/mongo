@@ -277,7 +277,43 @@ namespace mongo {
         /** @return if the user is a valid user doc
             criter: isValid() no . or $ field names
          */
-        bool okForStorage() const;
+        inline bool okForStorage() const {
+            return _okForStorage(false, true).isOK();
+        }
+
+        /** Same as above with the following extra restrictions
+         *  Not valid if:
+         *      - "_id" field is a
+         *          -- Regex
+         *          -- Array
+         */
+        inline bool okForStorageAsRoot() const {
+            return _okForStorage(true, true).isOK();
+        }
+
+        /**
+         * Validates that this can be stored as an embedded document
+         * See details above in okForStorage
+         *
+         * If 'deep' is true then validation is done to children
+         *
+         * If not valid a user readable status message is returned.
+         */
+        inline Status storageValidEmbedded(const bool deep = true) const {
+            return _okForStorage(false, deep);
+        }
+
+        /**
+         * Validates that this can be stored as a document (in a collection)
+         * See details above in okForStorageAsRoot
+         *
+         * If 'deep' is true then validation is done to children
+         *
+         * If not valid a user readable status message is returned.
+         */
+        inline Status storageValid(const bool deep = true) const {
+            return _okForStorage(true, deep);
+        }
 
         /** @return true if object is empty -- i.e.,  {} */
         bool isEmpty() const { return objsize() <= 5; }
@@ -515,6 +551,14 @@ namespace mongo {
             if ( !isValid() )
                 _assertInvalid();
         }
+
+        /**
+         * Validate if the element is okay to be stored in a collection, maybe as the root element
+         *
+         * If 'root' is true then checks against _id are made.
+         * If 'deep' is false then do not traverse through children
+         */
+        Status _okForStorage(bool root, bool deep) const;
     };
 
     std::ostream& operator<<( std::ostream &s, const BSONObj &o );

@@ -26,6 +26,7 @@
 #include "mongo/db/collection.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
 
@@ -224,7 +225,10 @@ namespace mongo {
                     request.setUpdates(update);
                     request.setUpsert(upsert);
                     request.setUpdateOpLog();
-
+                    // TODO(greg) We need to send if we are ignoring
+                    // the shard version below, but for now no
+                    UpdateLifecycleImpl updateLifecycle(false, requestNs);
+                    request.setLifecycle(&updateLifecycle);
                     UpdateResult res = mongo::update(request, &cc().curop()->debug());
 
                     LOG(3) << "update result: "  << res ;

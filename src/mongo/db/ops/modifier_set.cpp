@@ -97,24 +97,8 @@ namespace mongo {
         // value analysis
         //
 
-        // Is the target set value safe?
-        switch (modExpr.type()) {
-
-        case EOO:
+        if (!modExpr.ok())
             return Status(ErrorCodes::BadValue, "cannot $set an empty value");
-
-        case Object:
-        case Array:
-            if (opts.enforceOkForStorage) {
-                Status s = modExpr.Obj().storageValidEmbedded();
-                if (!s.isOK())
-                    return s;
-            }
-            break;
-
-        default:
-            break;
-        }
 
         _val = modExpr;
         _modOptions = opts;
