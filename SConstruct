@@ -1097,6 +1097,9 @@ def doConfigure(myenv):
 
     conf = Configure(myenv)
 
+    if use_system_version_of_library("yaml"):
+        conf.FindSysLibDep("yaml", ["yaml"])
+
     if use_system_version_of_library("boost"):
         if not conf.CheckCXXHeader( "boost/filesystem/operations.hpp" ):
             print( "can't find boost headers" )
