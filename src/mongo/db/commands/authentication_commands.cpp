@@ -230,7 +230,8 @@ namespace mongo {
             StringData srvClusterId = srvSubjectName.substr(0, srvSubjectName.find("/CN")+1);
             StringData peerClusterId = subjectName.substr(0, subjectName.find("/CN")+1);
 
-            // Handle internal cluster member auth, only applies to server-server connections 
+            // Handle internal cluster member auth, only applies to server-server connections
+            int clusterAuthMode = serverGlobalParams.clusterAuthMode.load(); 
             if (srvClusterId == peerClusterId) {
                 if (cmdLine.clusterAuthMode == "keyfile") {
                     errmsg = "X509 authentication is not allowed for cluster authentication";
