@@ -382,6 +382,7 @@ namespace mongo {
 
         validateUpdate(nsString.ns().c_str(), request.getUpdates(), request.getQuery());
 
+        const CurOp* curOp = cc().curop();
         Collection* collection = cc().database()->getCollection(nsString.ns());
 
         // TODO: This seems a bit circuitious.
@@ -403,8 +404,19 @@ namespace mongo {
             uasserted(17243, "could not get runner " + request.getQuery().toString());
         }
 
+        // Create the runner and setup all deps.
         auto_ptr<Runner> runner(rawRunner);
+
+        // Register Runner with ClientCursor
+        ClientCursor::registerRunner(runner.get());
+
+        // Cleanup the runner if needed
+        const scoped_ptr<DeregisterEvenIfUnderlyingCodeThrows> safety(
+                new DeregisterEvenIfUnderlyingCodeThrows(runner.get()));
+
+        // Custom ("manual") yield policy
         RunnerYieldPolicy yieldPolicy;
+        runner->setYieldPolicy(Runner::YIELD_AUTO);
 
         // If the update was marked with '$isolated' (a.k.a '$atomic'), we are not allowed to
         // yield while evaluating the update loop below.
@@ -425,12 +437,11 @@ namespace mongo {
         const bool dedupHere = cursor->autoDedup();
 
         //
-        // We'll start assuming we have one or more documents for this update. (Othwerwise,
-        // we'll fallback to upserting.)
+        // We'll start assuming we have one or more documents for this update. (Otherwise,
+        // we'll fall-back to insert case (if upsert is true).)
         //
 
-        // We record that this will not be an upsert, in case a mod doesn't want to be applied
-        // when in strict update mode.
+        // We are an update until we fall into the insert case below.
         driver->setContext(ModifierInterface::ExecInfo::UPDATE_CONTEXT);
 
         // Let's fetch each of them and pipe them through the update expression, making sure to
@@ -452,61 +463,18 @@ namespace mongo {
         mutablebson::Document doc;
         mutablebson::DamageVector damages;
 
+        // Used during iteration of docs
         BSONObj oldObj;
         DiskLoc loc;
-        Runner::RunnerState state;
-        while (Runner::RUNNER_ADVANCED == (state = runner->getNext(&oldObj, &loc))) {
-            if (!isolated && opDebug->nscanned != 0) {
-                if (yieldPolicy.shouldYield()) {
-                    if (!yieldPolicy.yieldAndCheckIfOK(runner.get())) {
-                        // TODO: Error?
-                        break;
-                    }
 
-                // We are permitted to yield. To do so we need a ClientCursor, so create one
-                // now if we have not yet done so.
-                if ( !clientCursor.get() )
-                    clientCursor.reset(
-                        new ClientCursor( QueryOption_NoCursorTimeout, cursor, nsString.ns() ) );
+        // Get first doc, and location
+        Runner::RunnerState state = runner->getNext(&oldObj, &loc);
+        while (Runner::RUNNER_ADVANCED == state) {
 
-                // Ask the client cursor to yield. We get two bits of state back: whether or not
-                // we yielded, and whether or not we correctly recovered from yielding.
-                bool yielded = false;
-                const bool recovered = clientCursor->yieldSometimes(
-                    ClientCursor::WillNeed, &yielded );
-
-                if ( !recovered ) {
-                    // If we failed to recover from the yield, then the ClientCursor is already
-                    // gone. Release it so we don't destroy it a second time.
-                    clientCursor.release();
-                    break;
-                }
-
-                if ( !cursor->ok() ) {
-                    // If the cursor died while we were yielded, just get out of the update loop.
-                    break;
-                }
-
-                if ( yielded ) {
-                    // We yielded and recovered OK, and our cursor is still good. Details about
-                    // our namespace may have changed while we were yielded, so we re-acquire
-                    // them here. If we can't do so, escape the update loop. Otherwise, refresh
-                    // the driver so that it knows about what is currently indexed.
-
-                    const UpdateLifecycle* lifecycle = request.getLifecycle();
-                    collection = cc().database()->getCollection(nsString.ns());
-                    if (!collection || (lifecycle && !lifecycle->canContinue())) {
-                        uasserted(17270,
-                                  "Update aborted due to invalid state transitions after yield.");
-                    }
-
-                    if (lifecycle && lifecycle->canContinue()) {
-                        IndexPathSet indexes;
-                        lifecycle->getIndexKeys(&indexes);
-                        driver->refreshIndexKeys(indexes);
-                    }
-                }
-
+            // We fill this with the new locs of updates so we don't double-update anything.
+            if (updatedLocs.count(loc)) {
+                state = runner->getNext(&oldObj, &loc);
+                continue;
             }
 
             // We count how many documents we scanned even though we may skip those that are
@@ -587,6 +555,7 @@ namespace mongo {
             // TODO: Only do this when needed (need requirements from update_driver/mods)
             MatchDetails matchDetails;
             matchDetails.requestElemMatchKey();
+
             // TODO: Find out if can move this to the query side so we don't need to double match
             verify(cq->root()->matchesBSON(oldObj, &matchDetails));
 
@@ -645,6 +614,7 @@ namespace mongo {
                 }
             }
 
+            // Save state before making changes
             runner->saveState();
 
             if (inPlace && !driver->modsAffectIndices()) {
@@ -694,6 +664,11 @@ namespace mongo {
                 objectWasChanged = true;
             }
 
+            // Restore state after modification
+            uassert(17278,
+                    "Update could not restore runner state after updating a document.",
+                    runner->restoreState());
+
             // Call logOp if requested.
             if (request.shouldCallLogOp()) {
                 if (driver->isDocReplacement() || !logObj.isEmpty()) {
@@ -711,14 +686,47 @@ namespace mongo {
                 break;
             }
 
-            // If we used the cursor mechanism that prepares an earlier seen document for a
-            // write we need to tell such mechanisms that the write is over.
-            if ( touchPreviousDoc ) {
-                cursor->recoverFromTouchingEarlierIterate();
-            }
-
+            // Opportunity for journaling to write during the update.
             getDur().commitIfNeeded();
 
+            // Disable yielding if isolate with write done
+            const int numChanged = numMatched - opDebug->nupdateNoops;
+
+            // See if we have a write in isolation mode
+            const bool isolationModeWriteOccured = isolated && (numChanged > 0);
+
+            // Change to manual yielding (no yielding) if we have written in isolation mode
+            if (isolationModeWriteOccured) {
+                runner->setYieldPolicy(Runner::YIELD_MANUAL);
+            }
+
+            // Keep track of yield count so we can see if one happens on the getNext() call
+            const int oldYieldCount = curOp->numYields();
+
+            // Get next doc, and location
+            state = runner->getNext(&oldObj, &loc);
+
+            // Refresh things after a yield.
+            const bool didYield = (oldYieldCount != curOp->numYields());
+            if (!isolationModeWriteOccured && didYield) {
+
+                // We yielded and recovered OK, and our cursor is still good. Details about
+                // our namespace may have changed while we were yielded, so we re-acquire
+                // them here. If we can't do so, escape the update loop. Otherwise, refresh
+                // the driver so that it knows about what is currently indexed.
+                const UpdateLifecycle* lifecycle = request.getLifecycle();
+                collection = cc().database()->getCollection(nsString.ns());
+                if (!collection || (lifecycle && !lifecycle->canContinue())) {
+                    uasserted(17270,
+                              "Update aborted due to invalid state transitions after yield.");
+                }
+
+                if (lifecycle && lifecycle->canContinue()) {
+                    IndexPathSet indexes;
+                    lifecycle->getIndexKeys(&indexes);
+                    driver->refreshIndexKeys(indexes);
+                }
+            }
         }
 
         // TODO: Can this be simplified?
