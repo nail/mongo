@@ -89,7 +89,7 @@ namespace mongo {
 
         if (modExpr.type() != mongo::Object)
             return Status(ErrorCodes::BadValue,
-                          str::stream() << "The $bit modifier is not compatible with "
+                          str::stream() << "The $bit modifier is not compatible with a "
                                         << typeName(modExpr.type())
                                         << ". You must pass in an embedded document: "
                                            "{$bit: {field: {and/or/xor: #}}");
@@ -100,14 +100,6 @@ namespace mongo {
             BSONElement curOp = opsIterator.next();
 
             const StringData payloadFieldName = curOp.fieldName();
-
-            if ((curOp.type() != mongo::NumberInt) &&
-                (curOp.type() != mongo::NumberLong))
-                return Status(
-                    ErrorCodes::BadValue,
-                    str::stream() << "The $bit modifier field must be an Integer(32/64 bit); a '"
-                                  << typeName(curOp.type())
-                                  << "' is not supported here: " << curOp);
 
             SafeNumOp op = NULL;
 
@@ -125,8 +117,16 @@ namespace mongo {
                     ErrorCodes::BadValue,
                     str::stream() << "The $bit modifier only supports 'and', 'or', and 'xor', not '"
                                   << payloadFieldName
-                                  << "' which is an unknown operator: " << curOp);
+                                  << "' which is an unknown operator: {" << curOp << "}");
             }
+
+            if ((curOp.type() != mongo::NumberInt) &&
+                (curOp.type() != mongo::NumberLong))
+                return Status(
+                    ErrorCodes::BadValue,
+                    str::stream() << "The $bit modifier field must be an Integer(32/64 bit); a '"
+                                  << typeName(curOp.type())
+                                  << "' is not supported here: {" << curOp << "}");
 
             const OpEntry entry = {SafeNum(curOp), op};
             _ops.push_back(entry);

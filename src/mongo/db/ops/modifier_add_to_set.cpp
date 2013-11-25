@@ -136,7 +136,7 @@ namespace mongo {
                 if (modExprObjPayload.type() != mongo::Array) {
                     return Status(ErrorCodes::BadValue,
                                   str::stream() << "The argument to $each in $addToSet must "
-                                                   "be an array but it was type of: "
+                                                   "be an array but it was of type "
                                                 << typeName(modExprObjPayload.type()));
                 }
 
