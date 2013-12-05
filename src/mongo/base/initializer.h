@@ -22,6 +22,7 @@
 #include "mongo/base/initializer_context.h"
 #include "mongo/base/initializer_dependency_graph.h"
 #include "mongo/base/status.h"
+#include "mongo/client/export_macros.h"
 
 namespace mongo {
 
@@ -33,7 +34,7 @@ namespace mongo {
      * edges to the graph.  Then, one executes the process, causing each initialization operation to
      * execute in an order that respects the programmer-established prerequistes.
      */
-    class Initializer {
+    class MONGO_CLIENT_API Initializer {
         MONGO_DISALLOW_COPYING(Initializer);
     public:
         Initializer();

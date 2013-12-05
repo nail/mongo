@@ -17,14 +17,12 @@
 
 #include <iostream>
 
-#include "mongo/base/init.h"
 #include "mongo/client/dbclient.h"
 #include "mongo/util/net/httpclient.h"
 
 using namespace mongo;
 
-void play( string url ) {
-    cout << "[" << url << "]" << endl;
+    std::cout << "[" << url << "]" << std::endl;
 
     HttpClient c;
     HttpClient::Result r;
@@ -33,19 +31,24 @@ void play( string url ) {
     HttpClient::Headers h = r.getHeaders();
     MONGO_verify( h["Content-Type"].find( "text/html" ) == 0 );
 
-    cout << "\tHeaders" << endl;
+    std::cout << "\tHeaders" << std::endl;
     for ( HttpClient::Headers::iterator i = h.begin() ; i != h.end(); ++i ) {
-        cout << "\t\t" << i->first << "\t" << i->second << endl;
+        std::cout << "\t\t" << i->first << "\t" << i->second << std::endl;
     }
-    
+
 }
 
 int main( int argc, const char **argv, char **envp) {
 
 #ifdef MONGO_SSL
-    sslGlobalParams.sslMode.store(SSLGlobalParams::SSLMode_requireSSL);
-    runGlobalInitializersOrDie(argc, argv, envp);
+    mongo::sslGlobalParams.sslMode.store(mongo::SSLGlobalParams::SSLMode_requireSSL);
 #endif
+
+    mongo::Status status = mongo::client::initialize();
+    if (!status.isOK()) {
+        std::cout << "Failed to initialize mongodb client. " << status << std::endl;
+        return EXIT_FAILURE;
+    }
 
     int port = 27017;
     if ( argc != 1 ) {
@@ -55,8 +58,8 @@ int main( int argc, const char **argv, char **envp) {
     }
     port += 1000;
 
-    play( str::stream() << "http://localhost:" << port << "/" );
-    
+    play( mongo::str::stream() << "http://localhost:" << port << "/" );
+
 #ifdef MONGO_SSL
     play( "https://www.mongodb.com/" );
 #endif
