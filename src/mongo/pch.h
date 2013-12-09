@@ -53,9 +53,10 @@
 #include <boost/bind.hpp>
 #include <boost/version.hpp>
 
+#include "mongo/client/export_macros.h"
+
 #include "mongo/client/redef_macros.h"
 
-#include "mongo/client/export_macros.h"
 #include "mongo/util/exit_code.h"
 
 namespace mongo {

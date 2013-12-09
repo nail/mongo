@@ -89,22 +89,6 @@ target_link_libraries(processinfo LINK_PUBLIC
   bson
   )
 
-if (system_suffix STREQUAL darwin OR
-    system_suffix STREQUAL freebsd OR
-    system_suffix STREQUAL sunos5)
-  # only linux2 and win32 exist right now
-  add_library(systeminfo STATIC
-    systeminfo
-    systeminfo_none
-    )
-else ()
-  add_library(systeminfo STATIC
-    systeminfo
-    systeminfo_${system_suffix}
-    )
-endif ()
-add_dependencies(systeminfo generate_error_codes generate_action_types)
-
 add_library(fail_point STATIC
   fail_point
   fail_point_registry

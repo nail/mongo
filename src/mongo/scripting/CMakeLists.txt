@@ -25,5 +25,6 @@ if (JS_ENGINE STREQUAL v8)
     mongocommon
     stringutils
     )
+else ()
   message(SEND_ERROR "unknown js engine")
 endif ()

@@ -10,7 +10,7 @@ target_link_libraries(alltools LINK_PUBLIC
   notmongodormongos
   )
 
-add_library(docgenerator STATIC
-  docgenerator
+add_library(docgeneratormain STATIC
+  docgeneratormain
   )
-add_dependencies(docgenerator generate_error_codes generate_action_types)
+add_dependencies(docgeneratormain generate_error_codes generate_action_types)

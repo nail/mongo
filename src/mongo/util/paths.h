@@ -26,9 +26,9 @@
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
 
-#include "mongo/db/storage_options.h"
-
 namespace mongo {
+
+    extern std::string dbpath;
     
     using namespace mongoutils;
 
@@ -48,7 +48,7 @@ namespace mongo {
         
         /** from a full path */
         static RelativePath fromFullPath(boost::filesystem::path f) {
-            boost::filesystem::path dbp(storageGlobalParams.dbpath); // normalizes / and backslash
+            boost::filesystem::path dbp(dbpath); // normalizes / and backslash
             string fullpath = f.string();
             string relative = str::after(fullpath, dbp.string());
             if( relative.empty() ) {
