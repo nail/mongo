@@ -85,7 +85,7 @@ namespace {
         Document logDoc;
         LogBuilder logBuilder(logDoc.root());
         ASSERT_OK(mod.log(&logBuilder));
-        ASSERT_EQUALS(fromjson("{ $unset : { a : 1 } }"), logDoc);
+        ASSERT_EQUALS(fromjson("{ $unset : { a : true } }"), logDoc);
     }
 
     TEST(SimpleMod, PrepareOKTargetFound) {
@@ -126,7 +126,7 @@ namespace {
         Document logDoc;
         LogBuilder logBuilder(logDoc.root());
         ASSERT_OK(mod.log(&logBuilder));
-        ASSERT_EQUALS(fromjson("{ $unset : { a : 1 } }"), logDoc);
+        ASSERT_EQUALS(fromjson("{ $unset : { a : true } }"), logDoc);
     }
 
     TEST(SimpleMod, PrepareAndLogMissingElementAfterFoundPath) {
@@ -141,7 +141,7 @@ namespace {
         Document logDoc;
         LogBuilder logBuilder(logDoc.root());
         ASSERT_OK(mod.log(&logBuilder));
-        ASSERT_EQUALS(fromjson("{ $unset : { 'a.b.c.d' : 1 } }"), logDoc);
+        ASSERT_EQUALS(fromjson("{ $unset : { 'a.b.c.d' : true } }"), logDoc);
     }
 
     TEST(SimpleMod, PrepareAndLogEmptyArray) {
