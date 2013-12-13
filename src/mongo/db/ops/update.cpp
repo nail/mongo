@@ -623,6 +623,9 @@ namespace mongo {
                 // no work to do, in which case we want to consider the object unchanged.
                 if (!damages.empty() ) {
 
+                    // Invalidate the document we are changing.
+                    ClientCursor::aboutToDelete(nsString.ns(), collection->details(), loc);
+
                     collection->details()->paddingFits();
 
                     // All updates were in place. Apply them via durability and writing pointer.
@@ -641,6 +644,9 @@ namespace mongo {
                 newObj = oldObj;
             }
             else {
+
+                // Invalidate the document we are changing.
+                ClientCursor::aboutToDelete(nsString.ns(), collection->details(), loc);
 
                 // The updates were not in place. Apply them through the file manager.
                 newObj = doc.getObject();
