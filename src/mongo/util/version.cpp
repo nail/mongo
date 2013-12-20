@@ -16,13 +16,9 @@
  *    limitations under the License.
  */
 
+#include "mongo/platform/basic.h"
 
-#include <cstdlib>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <string>
-#include <fstream>
+#include "mongo/util/version.h"
 
 #include "mongo/base/parse_number.h"
 #include "mongo/db/jsobj.h"

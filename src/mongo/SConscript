@@ -212,6 +212,15 @@ env.StaticLibrary( 'mongohasher', [ "db/hasher.cpp" ] )
 
 env.StaticLibrary('synchronization', [ 'util/concurrency/synchronization.cpp' ])
 
+env.Library('version',
+            [
+                'buildinfo.cpp',
+                'util/version.cpp'
+            ],
+            LIBDEPS=[
+                'bson',
+                '$BUILD_DIR/mongo/base/base'
+            ])
 commonFiles = [ "pch.cpp",
                 "buildinfo.cpp",
                 "db/lasterror.cpp",
