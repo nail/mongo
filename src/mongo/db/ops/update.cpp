@@ -467,7 +467,8 @@ namespace mongo {
 
         Client& client = cc();
 
-        mutablebson::Document doc;
+        // Get the cached document from the update driver.
+        mutablebson::Document& doc = driver->getDocument();
         mutablebson::DamageVector damages;
 
         // Used during iteration of docs
