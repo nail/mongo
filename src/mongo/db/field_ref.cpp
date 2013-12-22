@@ -23,15 +23,21 @@
 
 namespace mongo {
 
-    void FieldRef::parse(const StringData& dottedField) {
-        if (dottedField.size() == 0) {
+    FieldRef::FieldRef() : _size(0) {}
+
+    FieldRef::FieldRef(const StringData& path) : _size(0) {
+        parse(path);
+    }
+
+    void FieldRef::parse(const StringData& path) {
+        if (path.size() == 0) {
             return;
         }
 
         // We guarantee that accesses through getPart() will be valid while 'this' is. So we
-        // take a copy. We're going to be "chopping" up the copy into c-strings.
-        _fieldBase.reset(new char[dottedField.size()+1]);
-        dottedField.copyTo( _fieldBase.get(), true );
+        // keep a copy in a local sting.
+
+        _dotted = path.toString();
 
         // Separate the field parts using '.' as a delimiter.
         char* beg = _fieldBase.get();

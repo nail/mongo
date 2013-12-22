@@ -55,8 +55,7 @@ namespace mongo {
             return foundConflict;
 
         StringData prefixStr = safeFirstPart(toCheck);
-        FieldRef prefixField;
-        prefixField.parse(prefixStr);
+        FieldRef prefixField(prefixStr);
 
         FieldSet::iterator it = _fieldSet.lower_bound(&prefixField);
         // Now, iterate over all the present fields in the set that have the same prefix.
@@ -110,8 +109,7 @@ namespace mongo {
         // At each insertion, we only need to bother checking the fields in the set that have
         // at least some common prefix with the 'toInsert' field.
         StringData  prefixStr = safeFirstPart(toInsert);
-        FieldRef prefixField;
-        prefixField.parse(prefixStr);
+        FieldRef prefixField(prefixStr);
         FieldSet::iterator it = _fieldSet.lower_bound(&prefixField);
 
         // Now, iterate over all the present fields in the set that have the same prefix.
