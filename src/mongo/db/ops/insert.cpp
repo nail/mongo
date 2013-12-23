@@ -31,22 +31,30 @@
 
 namespace mongo {
 
-    void validateInsert(const BSONObj &obj) {
-        uassert(10059, "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
-        for (BSONObjIterator i(obj); i.more(); ) {
-            const BSONElement e = i.next();
-            // check no $ modifiers.  note we only check top level.
-            // (scanning deep would be quite expensive)
-            uassert(13511, "document to insert can't have $ fields", e.fieldName()[0] != '$');
-            if (str::equals(e.fieldName(), "_id")) {
-                // Note: Collections whose primary key is something other than _id will need to manually
-                //       check for multikeys and regexes. See IndexedCollection::extractPrimaryKey()
-                uassert(16440, "can't use an array for _id", e.type() != Array);
-                uassert(17033, "can't use a regex for _id", e.type() != RegEx);
-                uassert(17211, "can't use undefined for _id", e.type() != Undefined);
-            }
-        }
-    }
+    using namespace mongoutils;
+
+    StatusWith<BSONObj> fixDocumentForInsert( const BSONObj& doc ) {
+        if ( doc.objsize() > BSONObjMaxUserSize )
+            return StatusWith<BSONObj>( ErrorCodes::BadValue,
+                                        str::stream()
+                                        << "object to insert too large"
+                                        << doc.objsize() );
+
+        bool firstElementIsId = doc.firstElement().fieldNameStringData() == "_id";
+        bool hasTimestampToFix = false;
+        {
+            BSONObjIterator i( doc );
+            while ( i.more() ) {
+                BSONElement e = i.next();
+
+                if ( e.type() == Timestamp && e.timestampValue() == 0 ) {
+                    // we replace Timestamp(0,0) at the top level with a correct value
+                    // in the fast pass, we just mark that we want to swap
+                    hasTimestampToFix = true;
+                    break;
+                }
+
+                const char* fieldName = e.fieldName();
 
     void insertOneObject(Collection *cl, BSONObj &obj, uint64_t flags) {
         validateInsert(obj);
@@ -82,17 +90,35 @@ namespace mongo {
                         }
                         cl->notifyOfWriteOp();
                     }
-                }
-                else {
-                    insertOneObject(cl, objModified, flags); // may add _id field
-                    if (logop) {
-                        OplogHelpers::logInsert(ns, objModified, fromMigrate);
+                    if ( e.type() == Array ) {
+                        return StatusWith<BSONObj>( ErrorCodes::BadValue,
+                                                    "can't use an array for _id" );
                     }
                 }
-            } catch (const UserException &) {
-                if (!keepGoing || i == objs.size() - 1) {
-                    throw;
-                }
+
+            }
+        }
+
+        if ( firstElementIsId && !hasTimestampToFix )
+            return StatusWith<BSONObj>( BSONObj() );
+
+        bool hadId = firstElementIsId;
+
+        BSONObjIterator i( doc );
+
+        BSONObjBuilder b( doc.objsize() + 16 );
+        if ( firstElementIsId ) {
+            b.append( doc.firstElement() );
+            i.next();
+        }
+        else {
+            BSONElement e = doc["_id"];
+            if ( e.type() ) {
+                b.append( e );
+                hadId = true;
+            }
+            else {
+                b.appendOID( "_id", NULL, true );
             }
         }
     }
@@ -107,30 +133,37 @@ namespace mongo {
             } else {
                 b.append(e);
             }
+            else {
+                b.append( e );
+            }
         }
         return b.obj();
     }
 
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate) {
-        StringData _ns(ns);
-        if (NamespaceString::isSystem(_ns)) {
-            StringData db = nsToDatabaseSubstring(_ns);
-            massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(10095, "attempt to insert in reserved database name 'system'", db != "system");
-            massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
+    Status userAllowedWriteNS( const NamespaceString& ns ) {
+        return userAllowedWriteNS( ns.db(), ns.coll() );
+    }
 
-            // Trying to insert into a system collection.  Fancy side-effects go here:
-            if (nsToCollectionSubstring(ns) == "system.indexes") {
-                BSONObj obj = stripDropDups(objs[0]);
-                StringData collns = obj["ns"].Stringdata();
-                uassert(17314, mongoutils::str::stream() << "cannot build index on incorrect ns " << collns
-                        << " for current database " << db, nsToDatabaseSubstring(collns) == db);
-                Collection *cl = getOrCreateCollection(collns, logop);
-                bool ok = cl->ensureIndex(obj);
-                if (!ok) {
-                    // Already had that index
-                    return;
-                }
+    Status userAllowedWriteNS( const StringData& db, const StringData& coll ) {
+        // validity checking
+
+        if ( db.size() == 0 )
+            return Status( ErrorCodes::BadValue, "db cannot be blank" );
+
+        if ( !NamespaceString::validDBName( db ) )
+            return Status( ErrorCodes::BadValue, "invalid db name" );
+
+        if ( coll.size() == 0 )
+            return Status( ErrorCodes::BadValue, "collection cannot be blank" );
+
+        if ( !NamespaceString::validCollectionName( coll ) )
+            return Status( ErrorCodes::BadValue, "invalid collection name" );
+
+        // check spceial areas
+
+        if ( db == "system" )
+            return Status( ErrorCodes::BadValue, "cannot use 'system' database" );
+
 
                 // Now we have to actually insert that document into system.indexes, we may have
                 // modified it with stripDropDups.
