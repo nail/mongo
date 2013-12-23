@@ -352,6 +352,61 @@ namespace mongo {
             return Status::OK();
         }
 
+        Status recoverFromYield(UpdateLifecycle* lifecycle,
+                                UpdateDriver* driver,
+                                Collection* collection,
+                                const NamespaceString& nsString) {
+            // We yielded and recovered OK, and our cursor is still good. Details about
+            // our namespace may have changed while we were yielded, so we re-acquire
+            // them here. If we can't do so, escape the update loop. Otherwise, refresh
+            // the driver so that it knows about what is currently indexed.
+            Collection* oldCollection = collection;
+            collection = cc().database()->getCollection(nsString.ns());
+
+            // We should not get a new pointer to the same collection...
+            if (oldCollection && (oldCollection != collection))
+                return Status(ErrorCodes::IllegalOperation,
+                              str::stream() << "Collection changed during the Update: ok?"
+                                            << " old: " << oldCollection->ok()
+                                            << " new:" << collection->ok());
+
+            if (!collection)
+                return Status(ErrorCodes::IllegalOperation,
+                              "Update aborted due to invalid state transitions after yield -- "
+                              "collection pointer NULL.");
+
+            if (!collection->ok())
+                return Status(ErrorCodes::IllegalOperation,
+                              "Update aborted due to invalid state transitions after yield -- "
+                              "collection not ok().");
+
+            IndexCatalog* idxCatalog = collection->getIndexCatalog();
+            if (!idxCatalog)
+                return Status(ErrorCodes::IllegalOperation,
+                              "Update aborted due to invalid state transitions after yield -- "
+                              "IndexCatalog pointer NULL.");
+
+            if (!idxCatalog->ok())
+                return Status(ErrorCodes::IllegalOperation,
+                              "Update aborted due to invalid state transitions after yield -- "
+                              "IndexCatalog not ok().");
+
+            if (lifecycle) {
+
+                lifecycle->setCollection(collection);
+
+                if (!lifecycle->canContinue()) {
+                    return Status(ErrorCodes::IllegalOperation,
+                                  "Update aborted due to invalid state transitions after yield.",
+                                  17270);
+                }
+
+                driver->refreshIndexKeys(lifecycle->getIndexKeys());
+            }
+
+            return Status::OK();
+        }
+
     } // namespace
 
     UpdateResult update(const UpdateRequest& request, OpDebug* opDebug) {
@@ -385,6 +440,9 @@ namespace mongo {
 
         LOG(3) << "processing update : " << request;
         const NamespaceString& nsString = request.getNamespaceString();
+        UpdateLifecycle* lifecycle = request.getLifecycle();
+        const CurOp* curOp = cc().curop();
+        Collection* collection = cc().database()->getCollection(nsString.ns());
 
         validateUpdate(nsString.ns().c_str(), request.getUpdates(), request.getQuery());
 
@@ -394,10 +452,9 @@ namespace mongo {
         // TODO: This seems a bit circuitious.
         opDebug->updateobj = request.getUpdates();
 
-        if (request.getLifecycle()) {
-            IndexPathSet indexes;
-            request.getLifecycle()->getIndexKeys(&indexes);
-            driver->refreshIndexKeys(indexes);
+        if (lifecycle) {
+            lifecycle->setCollection(collection);
+            driver->refreshIndexKeys(lifecycle->getIndexKeys());
         }
 
         CanonicalQuery* cq;
@@ -406,7 +463,7 @@ namespace mongo {
         }
 
         Runner* rawRunner;
-        if (!getRunner(cq, &rawRunner).isOK()) {
+        if (!getRunner(collection, cq, &rawRunner).isOK()) {
             uasserted(17243, "could not get runner " + request.getQuery().toString());
         }
 

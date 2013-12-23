@@ -119,11 +119,11 @@ namespace mongo {
             return _fromReplication;
         }
 
-        inline void setLifecycle(const UpdateLifecycle* value) {
+        inline void setLifecycle(UpdateLifecycle* value) {
             _lifecycle = value;
         }
 
-        inline const UpdateLifecycle* getLifecycle() const {
+        inline UpdateLifecycle* getLifecycle() const {
             return _lifecycle;
         }
 
@@ -171,7 +171,7 @@ namespace mongo {
         bool _fromReplication;
 
         // The lifecycle data, and events used during the update request.
-        const UpdateLifecycle* _lifecycle;
+        UpdateLifecycle* _lifecycle;
     };
 
 } // namespace mongo
