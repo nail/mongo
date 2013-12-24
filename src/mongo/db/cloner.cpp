@@ -215,7 +215,32 @@ namespace mongo {
                         }
                         lastLog = now;
                     }
-                    mayInterrupt(_mayBeInterrupted);
+                    mayInterrupt( _mayBeInterrupted );
+                }
+
+                if ( isindex == false && collection == NULL ) {
+                    collection = context.db()->getCollection( to_collection );
+                    if ( !collection ) {
+                        massert( 17321,
+                                 str::stream()
+                                 << "collection dropped during clone ["
+                                 << to_collection << "]",
+                                 !createdCollection );
+                        createdCollection = true;
+                        collection = context.db()->createCollection( to_collection );
+                        verify( collection );
+                    }
+                }
+
+                BSONObj tmp = i.nextSafe();
+
+                /* assure object is valid.  note this will slow us down a little. */
+                const Status status = validateBSON(tmp.objdata(), tmp.objsize());
+                if (!status.isOK()) {
+                    out() << "Cloner: skipping corrupt object from " << from_collection
+                          << ": " << status.reason();
+                    continue;
+>>>>>>> ab48b39... SERVER-11903 Remove BSONElement::validate()
                 }
 
                 BSONObj js = i.nextSafe();

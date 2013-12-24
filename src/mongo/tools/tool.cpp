@@ -510,20 +510,23 @@ namespace mongo {
             verify( amt == (size_t)( size - 4 ) );
 
             BSONObj o( buf );
-            if ( _objcheck && ! o.valid() ) {
-                cerr << "INVALID OBJECT - going try and pring out " << endl;
-                cerr << "size: " << size << endl;
-                BSONObjIterator i(o);
-                while ( i.more() ) {
-                    BSONElement e = i.next();
+            if (bsonToolGlobalParams.objcheck) {
+                const Status status = validateBSON(buf, size);
+                if (!status.isOK()) {
+                    toolError() << "INVALID OBJECT - going to try and print out " << std::endl;
+                    toolError() << "size: " << size << std::endl;
+                    toolError() << "error: " << status.reason() << std::endl;
+
+                    StringBuilder sb;
                     try {
-                        e.validate();
+                        o.toString(sb); // using StringBuilder version to get as much as possible
+                    } catch (...) {
+                        toolError() << "object up to error: " << sb.str() << endl;
+                        throw;
                     }
-                    catch ( ... ) {
-                        cerr << "\t\t NEXT ONE IS INVALID" << endl;
-                    }
-                    cerr << "\t name : " << e.fieldName() << " " << e.type() << endl;
-                    cerr << "\t " << e << endl;
+                    toolError() << "complete object: " << sb.str() << endl;
+
+                    // NOTE: continuing with object even though we know it is invalid.
                 }
             }
 
