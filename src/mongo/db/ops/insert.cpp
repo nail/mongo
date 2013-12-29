@@ -165,14 +165,16 @@ namespace mongo {
             return Status( ErrorCodes::BadValue, "cannot use 'system' database" );
 
 
-                // Now we have to actually insert that document into system.indexes, we may have
-                // modified it with stripDropDups.
-                vector<BSONObj> newObjs;
-                newObjs.push_back(obj);
-                _insertObjects(ns, newObjs, keepGoing, flags, logop, fromMigrate);
-                return;
-            } else if (!legalClientSystemNS(ns, true)) {
-                uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
+        if ( coll.startsWith( "system." ) ) {
+            if ( coll == "system.indexes" ) return Status::OK();
+            if ( coll == "system.js" ) return Status::OK();
+            if ( coll == "system.profile" ) return Status::OK();
+            if ( coll == "system.users" ) return Status::OK();
+            if ( db == "admin" ) {
+                if ( coll == "system.version" ) return Status::OK();
+                if ( coll == "system.roles" ) return Status::OK();
+                if ( coll == "system.new_users" ) return Status::OK();
+                if ( coll == "system.backup_users" ) return Status::OK();
             }
         }
         _insertObjects(ns, objs, keepGoing, flags, logop, fromMigrate);
