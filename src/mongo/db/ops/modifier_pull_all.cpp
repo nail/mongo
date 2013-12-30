@@ -35,7 +35,6 @@ namespace mongo {
             : doc(*targetDoc)
             , pathFoundIndex(0)
             , pathFoundElement(doc.end())
-            , pathPositionalPart(std::string())
             , applyCalled(false)
             , elementsToRemove() {
         }
@@ -48,9 +47,6 @@ namespace mongo {
 
         // Element corresponding to _fieldRef[0.._idxFound].
         mutablebson::Element pathFoundElement;
-
-        // Value to bind to a $-positional field, if one is provided.
-        std::string pathPositionalPart;
 
         bool applyCalled;
 
@@ -79,7 +75,8 @@ namespace mongo {
     ModifierPullAll::~ModifierPullAll() {
     }
 
-    Status ModifierPullAll::init(const BSONElement& modExpr, const Options& opts) {
+    Status ModifierPullAll::init(const BSONElement& modExpr, const Options& opts,
+                                 bool* positional) {
 
         //
         // field name analysis
@@ -99,6 +96,10 @@ namespace mongo {
         bool foundDollar = fieldchecker::isPositional(_fieldRef,
                                                       &_positionalPathIndex,
                                                       &foundCount);
+
+        if (positional)
+            *positional = foundDollar;
+
         if (foundDollar && foundCount > 1) {
             return Status(ErrorCodes::BadValue,
                           str::stream() << "Too many positional (i.e. '$') elements found in path '"
@@ -135,8 +136,7 @@ namespace mongo {
                                                 "needed from the query. Unexpanded update: "
                                             << _fieldRef.dottedField());
             }
-            _preparedState->pathPositionalPart = matchedField.toString();
-            _fieldRef.setPart(_positionalPathIndex, _preparedState->pathPositionalPart);
+            _fieldRef.setPart(_positionalPathIndex, matchedField);
         }
 
         // Locate the field name in 'root'. Note that if we don't have the full path in the

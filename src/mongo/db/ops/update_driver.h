@@ -120,6 +120,10 @@ namespace mongo {
             return _objDoc;
         }
 
+        bool needMatchDetails() const {
+            return _positional;
+        }
+
     private:
 
         /** Resets the state of the class associated with mods (not the error state) */
@@ -164,6 +168,9 @@ namespace mongo {
         // Are any of the fields mentioned in the mods participating in any index? Is set anew
         // at each call to update.
         bool _affectIndices;
+
+        // Do any of the mods require positional match details when calling 'prepare'?
+        bool _positional;
 
         // Is this update going to be an upsert?
         ModifierInterface::ExecInfo::UpdateContext _context;

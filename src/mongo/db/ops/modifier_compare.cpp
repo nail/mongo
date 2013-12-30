@@ -43,9 +43,6 @@ namespace mongo {
 
         // Element corresponding to _fieldRef[0.._idxFound].
         mutablebson::Element elemFound;
-
-        // The replacement string passed in via prepare
-        std::string pathReplacementString;
     };
 
     ModifierCompare::ModifierCompare(ModifierCompare::ModifierCompareMode mode)
@@ -56,7 +53,8 @@ namespace mongo {
     ModifierCompare::~ModifierCompare() {
     }
 
-    Status ModifierCompare::init(const BSONElement& modExpr, const Options& opts) {
+    Status ModifierCompare::init(const BSONElement& modExpr, const Options& opts,
+                                 bool* positional) {
 
         _updatePath.parse(modExpr.fieldName());
         Status status = fieldchecker::isUpdatable(_updatePath);
@@ -67,8 +65,13 @@ namespace mongo {
         // If a $-positional operator was used, get the index in which it occurred
         // and ensure only one occurrence.
         size_t foundCount;
-        fieldchecker::isPositional(_updatePath, &_pathReplacementPosition, &foundCount);
-        if (_pathReplacementPosition && foundCount > 1) {
+        bool foundDollar = fieldchecker::isPositional(
+            _updatePath, &_pathReplacementPosition, &foundCount);
+
+        if (positional)
+            *positional = foundDollar;
+
+        if (foundDollar && foundCount > 1) {
             return Status(ErrorCodes::BadValue,
                           str::stream() << "Too many positional (i.e. '$') elements found in path '"
                                         << _updatePath.dottedField() << "'");
@@ -93,8 +96,7 @@ namespace mongo {
                                                "needed from the query. Unexpanded update: "
                                             << _updatePath.dottedField());
             }
-            _preparedState->pathReplacementString = matchedField.toString();
-            _updatePath.setPart(_pathReplacementPosition, _preparedState->pathReplacementString);
+            _updatePath.setPart(_pathReplacementPosition, matchedField);
         }
 
         // Locate the field name in 'root'. Note that we may not have all the parts in the path

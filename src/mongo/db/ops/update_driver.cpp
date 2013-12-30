@@ -41,7 +41,8 @@ namespace mongo {
         , _upsert(opts.upsert)
         , _logOp(opts.logOp)
         , _modOptions(opts.modOptions)
-        , _affectIndices(false) {
+        , _affectIndices(false)
+        , _positional(false) {
     }
 
     UpdateDriver::~UpdateDriver() {
@@ -137,10 +138,15 @@ namespace mongo {
         auto_ptr<ModifierInterface> mod(modifiertable::makeUpdateMod(type));
         dassert(mod.get());
 
-        Status status = mod->init(elem, _modOptions);
+        bool positional = false;
+        Status status = mod->init(elem, _modOptions, &positional);
         if (!status.isOK()) {
             return status;
         }
+
+        // If any modifier indicates that it requires a positional match, toggle the
+        // _positional flag to true.
+        _positional = _positional || positional;
 
         _mods.push_back(mod.release());
 
@@ -443,6 +449,7 @@ namespace mongo {
         }
         _indexedFields = NULL;
         _replacementMode = false;
+        _positional = false;
     }
 
 } // namespace mongo
