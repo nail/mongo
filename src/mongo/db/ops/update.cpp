@@ -514,6 +514,11 @@ namespace mongo {
         unordered_set<DiskLoc, DiskLoc::Hasher> seenLocs;
         int numMatched = 0;
 
+        // NOTE: When doing a multi-update, we only store the locs of moved docs, since the
+        // runner will keep track of the rest.
+        typedef unordered_set<DiskLoc, DiskLoc::Hasher> DiskLocSet;
+        const scoped_ptr<DiskLocSet> updatedLocs(request.isMulti() ? new DiskLocSet : NULL);
+
         // Reset these counters on each call. We might re-enter this function to retry this
         // update if we throw a page fault exception below, and we rely on these counters
         // reflecting only the actions taken locally. In particlar, we must have the no-op
@@ -592,17 +597,14 @@ namespace mongo {
                 }
             }
 
-            // For some (unfortunate) historical reasons, not all cursors would be valid after
-            // a write simply because we advanced them to a document not affected by the write.
-            // To protect in those cases, not only we engaged in the advance() logic above, but
-            // we also tell the cursor we're about to write a document that we've just seen.
-            // prepareToTouchEarlierIterate() requires calling later
-            // recoverFromTouchingEarlierIterate(), so we make a note here to do so.
-            bool touchPreviousDoc = request.isMulti() && cursor->ok();
-            if ( touchPreviousDoc ) {
-                if ( clientCursor.get() )
-                    clientCursor->setDoingDeletes( true );
-                cursor->prepareToTouchEarlierIterate();
+            // Refresh things after a yield.
+            if (didYield)
+                uassertStatusOK(recoverFromYield(lifecycle, driver, collection, nsString));
+
+            // We fill this with the new locs of moved doc so we don't double-update.
+            // NOTE: The runner will de-dup non-moved things.
+            if (updatedLocs && updatedLocs->count(loc) > 0) {
+                continue;
             }
 
             // Found a matching document
@@ -715,14 +717,12 @@ namespace mongo {
                 uassertStatusOK(res.getStatus());
                 DiskLoc newLoc = res.getValue();
 
-                // If we've moved this object to a new location, make sure we don't apply
-                // that update again if our traversal picks the objecta again.
-                //
-                // We also take note that the diskloc if the updates are affecting indices.
-                // Chances are that we're traversing one of them and they may be multi key and
-                // therefore duplicate disklocs.
-                if (newLoc != loc || driver->modsAffectIndices()) {
-                    updatedLocs.insert(newLoc);
+                // If we are tracking updated DiskLocs because we are doing a multi-update, and
+                // if we've moved this object to a new location, make sure we don't apply that
+                // update again if our traversal picks the object again. NOTE: The runner takes
+                // care of deduping non-moved docs.
+                if (updatedLocs && (newLoc != loc)) {
+                    updatedLocs->insert(newLoc);
                 }
 
                 objectWasChanged = true;
