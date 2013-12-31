@@ -53,7 +53,9 @@
 #include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/scopeguard.h"
 #include "mongo/util/signal_handlers.h"
+#include "mongo/util/signal_win32.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
 #include "mongo/util/exception_filter_win32.h"
@@ -229,8 +231,9 @@ namespace mongo {
 #ifndef _WIN32
         sigemptyset( &asyncSignals );
         sigaddset( &asyncSignals, SIGUSR1 );
-        startSignalProcessingThread();
 #endif
+
+        startSignalProcessingThread();
 
         setWindowsUnhandledExceptionFilter();
         set_new_handler( my_new_handler );
