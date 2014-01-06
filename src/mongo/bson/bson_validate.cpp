@@ -240,9 +240,29 @@ namespace mongo {
                     state = ValidationState::WithinObj;
                     // fall through
                 case ValidationState::WithinObj: {
-                    Status status = validateElementInfo(buffer, &state);
+                    const bool atTopLevel = frames.size() == 1;
+                    // check if we've finished validating idElem and are at start of next element.
+                    if (atTopLevel && idElemStartPos) {
+                        idElem = BSONElement(buffer->getBasePtr() + idElemStartPos);
+                        buffer->setIdElem(idElem);
+                        idElemStartPos = 0;
+                    }
+
+                    const uint64_t elemStartPos = buffer->position();
+                    ValidationState::State nextState = state;
+                    Status status = validateElementInfo(buffer, &nextState, idElem);
                     if (!status.isOK())
                         return status;
+
+                    // we've already validated that fieldname is safe to access as long as we aren't
+                    // at the end of the object, since EOO doesn't have a fieldname.
+                    if (nextState != ValidationState::EndObj && idElem.eoo() && atTopLevel) {
+                        if (strcmp(buffer->getBasePtr() + elemStartPos + 1/*type*/, "_id") == 0) {
+                            idElemStartPos = elemStartPos;
+                        }
+                    }
+
+                    state = nextState;
                     break;
                 }
                 case ValidationState::EndObj: {
