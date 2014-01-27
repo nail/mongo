@@ -100,12 +100,48 @@ namespace mongo {
                          plannerOptions);
     }
 
+    Status getRunner(Collection* collection,
+                     const std::string& ns,
+                     const BSONObj& unparsedQuery,
+                     Runner** outRunner,
+                     CanonicalQuery** outCanonicalQuery,
+                     size_t plannerOptions) {
+
+        if (!collection) {
+            *outCanonicalQuery = NULL;
+            *outRunner = new EOFRunner(NULL, ns);
+            return Status::OK();
+        }
+        if (!CanonicalQuery::isSimpleIdQuery(unparsedQuery) ||
+            !collection->getIndexCatalog()->findIdIndex()) {
+
+            Status status = CanonicalQuery::canonicalize(
+                    collection->ns(),
+                    unparsedQuery,
+                    outCanonicalQuery);
+            if (!status.isOK())
+                return status;
+            return getRunner(collection, *outCanonicalQuery, outRunner, plannerOptions);
+        }
+
+        *outCanonicalQuery = NULL;
+        *outRunner = new IDHackRunner(collection, unparsedQuery["_id"].wrap());
+        return Status::OK();
+    }
+
+    namespace {
+        // The body is below in the "count hack" section but getRunner calls it.
+        bool turnIxscanIntoCount(QuerySolution* soln);
+    }  // namespace
+
     /**
      * For a given query, get a runner.  The runner could be a SingleSolutionRunner, a
      * CachedQueryRunner, or a MultiPlanRunner, depending on the cache/query solver/etc.
      */
-    Status getRunner(Collection* collection, CanonicalQuery* rawCanonicalQuery,
-                     Runner** out, size_t plannerOptions) {
+    Status getRunner(Collection* collection,
+                     CanonicalQuery* rawCanonicalQuery,
+                     Runner** out,
+                     size_t plannerOptions) {
 
         verify(rawCanonicalQuery);
         auto_ptr<CanonicalQuery> canonicalQuery(rawCanonicalQuery);
@@ -190,10 +226,42 @@ namespace mongo {
         CachedSolution* rawCS;
         if (collection->infoCache()->getPlanCache()->get(*canonicalQuery, &rawCS).isOK()) {
             // We have a CachedSolution.  Have the planner turn it into a QuerySolution.
-            QuerySolution *qs;
-            Status status = QueryPlanner::planFromCache(*canonicalQuery, plannerParams, rawCS, &qs);
+            boost::scoped_ptr<CachedSolution> cs(rawCS);
+            QuerySolution *qs, *backupQs;
+            Status status = QueryPlanner::planFromCache(*canonicalQuery, plannerParams, *cs,
+                                                        &qs, &backupQs);
+
             if (status.isOK()) {
-                // XXX: create new CachedSolutionRunner here.
+                if (plannerParams.options & QueryPlannerParams::PRIVATE_IS_COUNT) {
+                    if (turnIxscanIntoCount(qs)) {
+                        WorkingSet* ws;
+                        PlanStage* root;
+                        verify(StageBuilder::build(*qs, &root, &ws));
+                        *out = new SingleSolutionRunner(collection,
+                                                        canonicalQuery.release(), qs, root, ws);
+                        if (NULL != backupQs) {
+                            delete backupQs;
+                        }
+                        return Status::OK();
+                    }
+                }
+
+                WorkingSet* ws;
+                PlanStage* root;
+                verify(StageBuilder::build(*qs, &root, &ws));
+                CachedPlanRunner* cpr = new CachedPlanRunner(collection,
+                                                             canonicalQuery.release(), qs,
+                                                             root, ws);
+
+                if (NULL != backupQs) {
+                    WorkingSet* backupWs;
+                    PlanStage* backupRoot;
+                    verify(StageBuilder::build(*backupQs, &backupRoot, &backupWs));
+                    cpr->setBackupPlan(backupQs, backupRoot, backupWs);
+                }
+
+                *out = cpr;
+                return Status::OK();
             }
         }
 
@@ -209,17 +277,37 @@ namespace mongo {
                           " planner returned error: " + status.reason());
         }
 
-        /*
-        for (size_t i = 0; i < solutions.size(); ++i) {
-            QLOG() << "solution " << i << " is " << solutions[i]->toString() << endl;
-        }
-        */
-
-        // We cannot figure out how to answer the query.  Should this ever happen?
+        // We cannot figure out how to answer the query.  Perhaps it requires an index
+        // we do not have?
         if (0 == solutions.size()) {
             return Status(ErrorCodes::BadValue, 
                           "error processing query: " + canonicalQuery->toString() +
                           " No query solutions");
+        }
+
+        // See if one of our solutions is a fast count hack in disguise.
+        if (plannerParams.options & QueryPlannerParams::PRIVATE_IS_COUNT) {
+            for (size_t i = 0; i < solutions.size(); ++i) {
+                if (turnIxscanIntoCount(solutions[i])) {
+                    // Great, we can use solutions[i].  Clean up the other QuerySolution(s).
+                    for (size_t j = 0; j < solutions.size(); ++j) {
+                        if (j != i) {
+                            delete solutions[j];
+                        }
+                    }
+
+                    // We're not going to cache anything that's fast count.
+                    WorkingSet* ws;
+                    PlanStage* root;
+                    verify(StageBuilder::build(*solutions[i], &root, &ws));
+                    *out = new SingleSolutionRunner(collection,
+                                                    canonicalQuery.release(),
+                                                    solutions[i],
+                                                    root,
+                                                    ws);
+                    return Status::OK();
+                }
+            }
         }
 
         if (1 == solutions.size()) {
@@ -245,6 +333,401 @@ namespace mongo {
             *out = mpr.release();
             return Status::OK();
         }
+    }
+
+    //
+    // Count hack
+    //
+
+    namespace {
+
+        /**
+         * Returns 'true' if the bounds 'bounds' can be represented as an interval between two the two
+         * values 'startKey' and 'endKey'.  Inclusivity of each bound is set through the relevant
+         * fooKeyInclusive parameter.
+         *
+         * Returns 'false' otherwise.
+         *
+         * XXX: unit test this.
+         */
+        bool isSingleInterval(const IndexBounds& bounds,
+                              BSONObj* startKey,
+                              bool* startKeyInclusive,
+                              BSONObj* endKey,
+                              bool* endKeyInclusive) {
+            // We build our start/end keys as we go.
+            BSONObjBuilder startBob;
+            BSONObjBuilder endBob;
+
+            // The start and end keys are inclusive unless we have a non-point interval, in which case
+            // we take the inclusivity from there.
+            *startKeyInclusive = true;
+            *endKeyInclusive = true;
+
+            size_t fieldNo = 0;
+
+            // First, we skip over point intervals.
+            for (; fieldNo < bounds.fields.size(); ++fieldNo) {
+                const OrderedIntervalList& oil = bounds.fields[fieldNo];
+                // A point interval requires just one interval...
+                if (1 != oil.intervals.size()) {
+                    break;
+                }
+                if (!oil.intervals[0].isPoint()) {
+                    break;
+                }
+                // Since it's a point, start == end.
+                startBob.append(oil.intervals[0].start);
+                endBob.append(oil.intervals[0].end);
+            }
+
+            if (fieldNo >= bounds.fields.size()) {
+                // All our intervals are points.  We count for all values of one field.
+                *startKey = startBob.obj();
+                *endKey = endBob.obj();
+                return true;
+            }
+
+            // After point intervals we can have exactly one non-point interval.
+            const OrderedIntervalList& nonPoint = bounds.fields[fieldNo];
+            if (1 != nonPoint.intervals.size()) {
+                return false;
+            }
+
+            // Add the non-point interval to our builder and set the inclusivity from it.
+            startBob.append(nonPoint.intervals[0].start);
+            *startKeyInclusive = nonPoint.intervals[0].startInclusive;
+            endBob.append(nonPoint.intervals[0].end);
+            *endKeyInclusive = nonPoint.intervals[0].endInclusive;
+
+            ++fieldNo;
+
+            // Get some "all values" intervals for comparison's sake.
+            // TODO: make static?
+            Interval minMax = IndexBoundsBuilder::allValues();
+            Interval maxMin = minMax;
+            maxMin.reverse();
+
+            // And after the non-point interval we can have any number of "all values" intervals.
+            for (; fieldNo < bounds.fields.size(); ++fieldNo) {
+                const OrderedIntervalList& oil = bounds.fields[fieldNo];
+                // "All Values" is just one point.
+                if (1 != oil.intervals.size()) {
+                    break;
+                }
+
+                // Must be min->max or max->min.
+                if (oil.intervals[0].equals(minMax)) {
+                    // As an example for the logic below, consider the index {a:1, b:1} and a count for
+                    // {a: {$gt: 2}}.  Our start key isn't inclusive (as it's $gt: 2) and looks like
+                    // {"":2} so far.  If we move to the key greater than {"":2, "": MaxKey} we will get
+                    // the first value of 'a' that is greater than 2.
+                    if (!*startKeyInclusive) {
+                        startBob.appendMaxKey("");
+                    }
+                    else {
+                        // In this case, consider the index {a:1, b:1} and a count for {a:{$gte: 2}}.
+                        // We want to look at all values where a is 2, so our start key is {"":2,
+                        // "":MinKey}.
+                        startBob.appendMinKey("");
+                    }
+
+                    // Same deal as above.  Consider the index {a:1, b:1} and a count for {a: {$lt: 2}}.
+                    // Our end key isn't inclusive as ($lt: 2) and looks like {"":2} so far.  We can't
+                    // look at any values where a is 2 so we have to stop at {"":2, "": MinKey} as
+                    // that's the smallest key where a is still 2.
+                    if (!*endKeyInclusive) {
+                        endBob.appendMinKey("");
+                    }
+                    else {
+                        endBob.appendMaxKey("");
+                    }
+                }
+                else if (oil.intervals[0].equals(maxMin)) {
+                    // The reasoning here is the same as above but with the directions reversed.
+                    if (!*startKeyInclusive) {
+                        startBob.appendMinKey("");
+                    }
+                    else {
+                        startBob.appendMaxKey("");
+                    }
+                    if (!*endKeyInclusive) {
+                        endBob.appendMaxKey("");
+                    }
+                    else {
+                        endBob.appendMinKey("");
+                    }
+                }
+                else {
+                    // No dice.
+                    break;
+                }
+            }
+
+            if (fieldNo >= bounds.fields.size()) {
+                *startKey = startBob.obj();
+                *endKey = endBob.obj();
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+
+        /**
+         * Returns 'true' if the provided solution 'soln' can be rewritten to use
+         * a fast counting stage.  Mutates the tree in 'soln->root'.
+         *
+         * Otherwise, returns 'false'.
+         */
+        bool turnIxscanIntoCount(QuerySolution* soln) {
+            QuerySolutionNode* root = soln->root.get();
+
+            // Root should be a fetch w/o any filters.
+            if (STAGE_FETCH != root->getType()) {
+                return false;
+            }
+
+            if (NULL != root->filter.get()) {
+                return false;
+            }
+
+            // Child should be an ixscan.
+            if (STAGE_IXSCAN != root->children[0]->getType()) {
+                return false;
+            }
+
+            IndexScanNode* isn = static_cast<IndexScanNode*>(root->children[0]);
+
+            // No filters allowed and side-stepping isSimpleRange for now.  TODO: do we ever see
+            // isSimpleRange here?  because we could well use it.  I just don't think we ever do see it.
+            if (NULL != isn->filter.get() || isn->bounds.isSimpleRange) {
+                return false;
+            }
+
+            // Make sure the bounds are OK.
+            BSONObj startKey;
+            bool startKeyInclusive;
+            BSONObj endKey;
+            bool endKeyInclusive;
+
+            if (!isSingleInterval(isn->bounds, &startKey, &startKeyInclusive, &endKey, &endKeyInclusive)) {
+                return false;
+            }
+
+            // Make the count node that we replace the fetch + ixscan with.
+            CountNode* cn = new CountNode();
+            cn->indexKeyPattern = isn->indexKeyPattern;
+            cn->startKey = startKey;
+            cn->startKeyInclusive = startKeyInclusive;
+            cn->endKey = endKey;
+            cn->endKeyInclusive = endKeyInclusive;
+            // Takes ownership of 'cn' and deletes the old root.
+            soln->root.reset(cn);
+            return true;
+        }
+
+    }  // namespace
+
+    Status getRunnerCount(Collection* collection,
+                          const BSONObj& query,
+                          const BSONObj& hintObj,
+                          Runner** out) {
+        verify(collection);
+
+        CanonicalQuery* cq;
+        uassertStatusOK(CanonicalQuery::canonicalize(collection->ns().ns(),
+                                                     query,
+                                                     BSONObj(),
+                                                     BSONObj(), 
+                                                     0,
+                                                     0,
+                                                     hintObj,
+                                                     &cq)); 
+
+        return getRunner(collection, cq, out, QueryPlannerParams::PRIVATE_IS_COUNT);
+    }
+
+    //
+    // Distinct hack
+    //
+
+    /**
+     * If possible, turn the provided QuerySolution into a QuerySolution that uses a DistinctNode
+     * to provide results for the distinct command.
+     *
+     * If the provided solution could be mutated successfully, returns true, otherwise returns
+     * false.
+     */
+    bool turnIxscanIntoDistinctIxscan(QuerySolution* soln, const string& field) {
+        QuerySolutionNode* root = soln->root.get();
+
+        // We're looking for a project on top of an ixscan.
+        if (STAGE_PROJECTION == root->getType() && (STAGE_IXSCAN == root->children[0]->getType())) {
+            IndexScanNode* isn = static_cast<IndexScanNode*>(root->children[0]);
+
+            // An additional filter must be applied to the data in the key, so we can't just skip
+            // all the keys with a given value; we must examine every one to find the one that (may)
+            // pass the filter.
+            if (NULL != isn->filter.get()) {
+                return false;
+            }
+
+            // We only set this when we have special query modifiers (.max() or .min()) or other
+            // special cases.  Don't want to handle the interactions between those and distinct.
+            // Don't think this will ever really be true but if it somehow is, just ignore this
+            // soln.
+            if (isn->bounds.isSimpleRange) {
+                return false;
+            }
+
+            // Make a new DistinctNode.  We swap this for the ixscan in the provided solution.
+            DistinctNode* dn = new DistinctNode();
+            dn->indexKeyPattern = isn->indexKeyPattern;
+            dn->direction = isn->direction;
+            dn->bounds = isn->bounds;
+
+            // Figure out which field we're skipping to the next value of.  TODO: We currently only
+            // try to distinct-hack when there is an index prefixed by the field we're distinct-ing
+            // over.  Consider removing this code if we stick with that policy.
+            dn->fieldNo = 0;
+            BSONObjIterator it(isn->indexKeyPattern);
+            while (it.more()) {
+                if (field == it.next().fieldName()) {
+                    break;
+                }
+                dn->fieldNo++;
+            }
+
+            // Delete the old index scan, set the child of project to the fast distinct scan.
+            delete root->children[0];
+            root->children[0] = dn;
+            return true;
+        }
+
+        return false;
+    }
+
+    Status getRunnerDistinct(Collection* collection,
+                             const BSONObj& query,
+                             const string& field,
+                             Runner** out) {
+        // This should'a been checked by the distinct command.
+        verify(collection);
+
+        // TODO: check for idhack here?
+
+        // When can we do a fast distinct hack?
+        // 1. There is a plan with just one leaf and that leaf is an ixscan.
+        // 2. The ixscan indexes the field we're interested in.
+        // 2a: We are correct if the index contains the field but for now we look for prefix.
+        // 3. The query is covered/no fetch.
+        //
+        // We go through normal planning (with limited parameters) to see if we can produce
+        // a soln with the above properties.
+
+        QueryPlannerParams plannerParams;
+        plannerParams.options = QueryPlannerParams::NO_TABLE_SCAN;
+
+        IndexCatalog::IndexIterator ii = collection->getIndexCatalog()->getIndexIterator(false);
+        while (ii.more()) {
+            const IndexDescriptor* desc = ii.next();
+            // The distinct hack can work if any field is in the index but it's not always clear
+            // if it's a win unless it's the first field.
+            if (desc->keyPattern().firstElement().fieldName() == field) {
+                plannerParams.indices.push_back(IndexEntry(desc->keyPattern(),
+                                                           desc->isMultikey(),
+                                                           desc->isSparse(),
+                                                           desc->indexName(),
+                                                           desc->infoObj()));
+            }
+        }
+
+        // We only care about the field that we're projecting over.  Have to drop the _id field
+        // explicitly because those are .find() semantics.
+        //
+        // Applying a projection allows the planner to try to give us covered plans.
+        BSONObj projection;
+        if ("_id" == field) {
+            projection = BSON("_id" << 1);
+        }
+        else {
+            projection = BSON("_id" << 0 << field << 1);
+        }
+
+        // Apply a projection of the key.  Empty BSONObj() is for the sort.
+        CanonicalQuery* cq;
+        Status status = CanonicalQuery::canonicalize(collection->ns().ns(), query, BSONObj(), projection, &cq);
+        if (!status.isOK()) {
+            return status;
+        }
+
+        // No index has the field we're looking for.  Punt to normal planning.
+        if (plannerParams.indices.empty()) {
+            // Takes ownership of cq.
+            return getRunner(cq, out);
+        }
+
+        // If we're here, we have an index prefixed by the field we're distinct-ing over.
+
+        // If there's no query, we can just distinct-scan one of the indices.
+        if (query.isEmpty()) {
+            DistinctNode* dn = new DistinctNode();
+            dn->indexKeyPattern = plannerParams.indices[0].keyPattern;
+            dn->direction = 1;
+            IndexBoundsBuilder::allValuesBounds(dn->indexKeyPattern, &dn->bounds);
+            dn->fieldNo = 0;
+
+            QueryPlannerParams params;
+
+            // Takes ownership of 'dn'.
+            QuerySolution* soln = QueryPlannerAnalysis::analyzeDataAccess(*cq, params, dn);
+            verify(soln);
+
+            WorkingSet* ws;
+            PlanStage* root;
+            verify(StageBuilder::build(*soln, &root, &ws));
+            *out = new SingleSolutionRunner(collection, cq, soln, root, ws);
+            return Status::OK();
+        }
+
+        // See if we can answer the query in a fast-distinct compatible fashion.
+        vector<QuerySolution*> solutions;
+        status = QueryPlanner::plan(*cq, plannerParams, &solutions);
+        if (!status.isOK()) {
+            return getRunner(cq, out);
+        }
+
+        // XXX: why do we need to do this?  planner should prob do this internally
+        cq->root()->resetTag();
+
+        // We look for a solution that has an ixscan we can turn into a distinctixscan
+        for (size_t i = 0; i < solutions.size(); ++i) {
+            if (turnIxscanIntoDistinctIxscan(solutions[i], field)) {
+                // Great, we can use solutions[i].  Clean up the other QuerySolution(s).
+                for (size_t j = 0; j < solutions.size(); ++j) {
+                    if (j != i) {
+                        delete solutions[j];
+                    }
+                }
+
+                // Build and return the SSR over solutions[i].
+                WorkingSet* ws;
+                PlanStage* root;
+                verify(StageBuilder::build(*solutions[i], &root, &ws));
+                *out = new SingleSolutionRunner(collection, cq, solutions[i], root, ws);
+                return Status::OK();
+            }
+        }
+
+        // If we're here, the planner made a soln with the restricted index set but we couldn't
+        // translate any of them into a distinct-compatible soln.  So, delete the solutions and just
+        // go through normal planning.
+        for (size_t i = 0; i < solutions.size(); ++i) {
+            delete solutions[i];
+        }
+
+        return getRunner(cq, out);
     }
 
     ScopedRunnerRegistration::ScopedRunnerRegistration(Runner* runner)
