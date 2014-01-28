@@ -71,7 +71,4 @@ namespace mongo {
         verify(0);
     }
 
-    bool ProcessInfo::isDataFileZeroingNeeded() {
-        return false;
-    }
 }
