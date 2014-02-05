@@ -28,7 +28,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/relock.h"
+#include "mongo/db/query/get_runner.h"
 
 namespace mongo {
 
@@ -143,7 +143,27 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            bool found = Helpers::findOne( ns.c_str() , queryOriginal , doc );
+            bool found = false;
+            {
+                CanonicalQuery* cq;
+                massert(17383, "Could not canonicalize " + queryOriginal.toString(),
+                        CanonicalQuery::canonicalize(ns, queryOriginal, &cq).isOK());
+
+                Runner* rawRunner;
+                massert(17384, "Could not get runner for query " + queryOriginal.toString(),
+                        getRunner(cq, &rawRunner, QueryPlannerParams::DEFAULT).isOK());
+
+                auto_ptr<Runner> runner(rawRunner);
+
+                // Set up automatic yielding
+                const ScopedRunnerRegistration safety(runner.get());
+                runner->setYieldPolicy(Runner::YIELD_AUTO);
+
+                Runner::RunnerState state;
+                if (Runner::RUNNER_ADVANCED == (state = runner->getNext(&doc, NULL))) {
+                    found = true;
+                }
+            }
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {

@@ -503,8 +503,7 @@ namespace mongo {
         const scoped_ptr<DeregisterEvenIfUnderlyingCodeThrows> safety(
                 new DeregisterEvenIfUnderlyingCodeThrows(runner.get()));
 
-        // Custom ("manual") yield policy
-        RunnerYieldPolicy yieldPolicy;
+        // Use automatic yield policy
         runner->setYieldPolicy(Runner::YIELD_AUTO);
 
         // If the update was marked with '$isolated' (a.k.a '$atomic'), we are not allowed to
