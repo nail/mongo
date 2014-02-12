@@ -56,13 +56,185 @@ namespace mongo {
         //     return false;
         // }
         //
-        // const char *writeConcernErrField = writeConcernResults.asTempObj().getStringField("err");
-        // // TODO Should consider changing following existing strange behavior with GLE?
-        // // - {w:2} specified with batch where any op fails skips replication wait, yields success
-        // bool writeConcernFulfilled = !writeConcernErrField || strlen(writeConcernErrField) == 0;
-        // writeConcernResults.append("micros", static_cast<long long>(writeConcernTimer.micros()));
-        // writeConcernResults.append("ok", writeConcernFulfilled);
-        // result->append("writeConcernResults", writeConcernResults.obj());
+        // Try to enforce the write concern if everything succeeded (unordered or ordered)
+        // OR if something succeeded and we're unordered.
+        //
+
+        auto_ptr<WCErrorDetail> wcError;
+        bool needToEnforceWC = writeErrors.empty()
+                               || ( !request.getOrdered()
+                                    && writeErrors.size() < request.sizeWriteOps() );
+
+        if ( needToEnforceWC ) {
+
+            _client->curop()->setMessage( "waiting for write concern" );
+
+            WriteConcernResult res;
+            status = waitForWriteConcern( writeConcern, _client->getLastOp(), &res );
+
+            if ( !status.isOK() ) {
+                wcError.reset( toWriteConcernError( status, res ) );
+            }
+        }
+
+        //
+        // Refresh metadata if needed
+        //
+
+        bool staleBatch = !writeErrors.empty()
+                          && writeErrors.back()->getErrCode() == ErrorCodes::StaleShardVersion;
+
+        if ( staleBatch ) {
+
+            const BatchedRequestMetadata* requestMetadata = request.getMetadata();
+            dassert( requestMetadata );
+
+            // Make sure our shard name is set or is the same as what was set previously
+            if ( shardingState.setShardName( requestMetadata->getShardName() ) ) {
+
+                //
+                // First, we refresh metadata if we need to based on the requested version.
+                //
+
+                ChunkVersion latestShardVersion;
+                shardingState.refreshMetadataIfNeeded( request.getTargetingNS(),
+                                                       requestMetadata->getShardVersion(),
+                                                       &latestShardVersion );
+
+                // Report if we're still changing our metadata
+                // TODO: Better reporting per-collection
+                if ( shardingState.inCriticalMigrateSection() ) {
+                    noteInCriticalSection( writeErrors.back() );
+                }
+
+                if ( queueForMigrationCommit ) {
+
+                    //
+                    // Queue up for migration to end - this allows us to be sure that clients will
+                    // not repeatedly try to refresh metadata that is not yet written to the config
+                    // server.  Not necessary for correctness.
+                    // Exposed as optional parameter to allow testing of queuing behavior with
+                    // different network timings.
+                    //
+
+                    const ChunkVersion& requestShardVersion = requestMetadata->getShardVersion();
+
+                    //
+                    // Only wait if we're an older version (in the current collection epoch) and
+                    // we're not write compatible, implying that the current migration is affecting
+                    // writes.
+                    //
+
+                    if ( requestShardVersion.isOlderThan( latestShardVersion ) &&
+                         !requestShardVersion.isWriteCompatibleWith( latestShardVersion ) ) {
+
+                        while ( shardingState.inCriticalMigrateSection() ) {
+
+                            log() << "write request to old shard version "
+                                  << requestMetadata->getShardVersion().toString()
+                                  << " waiting for migration commit" << endl;
+
+                            shardingState.waitTillNotInCriticalSection( 10 /* secs */);
+                        }
+                    }
+                }
+            }
+            else {
+                // If our shard name is stale, our version must have been stale as well
+                dassert( writeErrors.size() == request.sizeWriteOps() );
+            }
+        }
+
+        //
+        // Construct response
+        //
+
+        response->setOk( true );
+
+        if ( !silentWC ) {
+
+            if ( upserted.size() ) {
+                response->setUpsertDetails( upserted );
+                upserted.clear();
+            }
+
+            if ( writeErrors.size() ) {
+                response->setErrDetails( writeErrors );
+                writeErrors.clear();
+            }
+
+            if ( wcError.get() ) {
+                response->setWriteConcernError( wcError.release() );
+            }
+
+            if ( anyReplEnabled() ) {
+                response->setLastOp( _client->getLastOp() );
+                if (theReplSet) {
+                    response->setElectionId( theReplSet->getElectionId() );
+                }
+            }
+
+            // Set the stats for the response
+            response->setN( _stats->numInserted + _stats->numUpserted + _stats->numMatched
+                            + _stats->numDeleted );
+            if ( request.getBatchType() == BatchedCommandRequest::BatchType_Update )
+                response->setNModified( _stats->numModified );
+        }
+
+        dassert( response->isValid( NULL ) );
+    }
+
+    // Translates write item type to wire protocol op code.
+    // Helper for WriteBatchExecutor::applyWriteItem().
+    static int getOpCode( BatchedCommandRequest::BatchType writeType ) {
+        switch ( writeType ) {
+        case BatchedCommandRequest::BatchType_Insert:
+            return dbInsert;
+        case BatchedCommandRequest::BatchType_Update:
+            return dbUpdate;
+        default:
+            dassert( writeType == BatchedCommandRequest::BatchType_Delete );
+            return dbDelete;
+        }
+        return 0;
+    }
+
+    static void buildStaleError( const ChunkVersion& shardVersionRecvd,
+                                 const ChunkVersion& shardVersionWanted,
+                                 WriteErrorDetail* error ) {
+
+        // Write stale error to results
+        error->setErrCode( ErrorCodes::StaleShardVersion );
+
+        BSONObjBuilder infoB;
+        shardVersionWanted.addToBSON( infoB, "vWanted" );
+        error->setErrInfo( infoB.obj() );
+
+        string errMsg = stream() << "stale shard version detected before write, received "
+                                 << shardVersionRecvd.toString() << " but local version is "
+                                 << shardVersionWanted.toString();
+        error->setErrMessage( errMsg );
+    }
+
+    static bool checkShardVersion( ShardingState* shardingState,
+                                   const BatchedCommandRequest& request,
+                                   WriteErrorDetail** error ) {
+
+        const NamespaceString nss( request.getTargetingNS() );
+        Lock::assertWriteLocked( nss.ns() );
+
+        ChunkVersion requestShardVersion =
+            request.isMetadataSet() && request.getMetadata()->isShardVersionSet() ?
+                request.getMetadata()->getShardVersion() : ChunkVersion::IGNORED();
+
+        if ( shardingState->enabled() ) {
+
+            CollectionMetadataPtr metadata = shardingState->getCollectionMetadata( nss.ns() );
+
+            if ( !ChunkVersion::isIgnoredVersion( requestShardVersion ) ) {
+
+                ChunkVersion shardVersion =
+                    metadata ? metadata->getShardVersion() : ChunkVersion::UNSHARDED();
 
         result->append("micros", static_cast<long long>(commandTimer.micros()));
 
@@ -84,8 +256,72 @@ namespace mongo {
 
             batchSuccess &= opSuccess;
 
-            if (!opSuccess && !writeBatch.getContinueOnError()) {
-                break;
+        currentOp->debug().ns = currentOp->getNS();
+        currentOp->debug().op = currentOp->getOp();
+
+        if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Insert ) {
+            // No-op for insert, we don't update query or updateobj
+        }
+        else if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Update ) {
+            currentOp->setQuery( currWrite.getUpdate()->getQuery() );
+            currentOp->debug().query = currWrite.getUpdate()->getQuery();
+            currentOp->debug().updateobj = currWrite.getUpdate()->getUpdateExpr();
+        }
+        else {
+            dassert( currWrite.getOpType() == BatchedCommandRequest::BatchType_Delete );
+            currentOp->setQuery( currWrite.getDelete()->getQuery() );
+            currentOp->debug().query = currWrite.getDelete()->getQuery();
+        }
+
+        return currentOp.release();
+    }
+
+    void WriteBatchExecutor::incOpStats( const BatchItemRef& currWrite ) {
+
+        if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Insert ) {
+            // No-op, for inserts we increment not on the op but once for each write
+        }
+        else if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Update ) {
+            _opCounters->gotUpdate();
+        }
+        else {
+            dassert( currWrite.getOpType() == BatchedCommandRequest::BatchType_Delete );
+            _opCounters->gotDelete();
+        }
+    }
+
+    void WriteBatchExecutor::incWriteStats( const BatchItemRef& currWrite,
+                                            const WriteOpStats& stats,
+                                            const WriteErrorDetail* error,
+                                            CurOp* currentOp ) {
+
+        if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Insert ) {
+            // We increment batch inserts like individual inserts
+            _opCounters->gotInsert();
+            _stats->numInserted += stats.n;
+            _le->nObjects = stats.n;
+            currentOp->debug().ninserted += stats.n;
+        }
+        else if ( currWrite.getOpType() == BatchedCommandRequest::BatchType_Update ) {
+            if ( stats.upsertedID.isEmpty() ) {
+                _stats->numMatched += stats.n;
+                _stats->numModified += stats.nModified;
+            }
+            else {
+                ++_stats->numUpserted;
+            }
+
+            if ( !error ) {
+                _le->recordUpdate( stats.upsertedID.isEmpty() && stats.n > 0,
+                        stats.n,
+                        stats.upsertedID );
+            }
+        }
+        else {
+            dassert( currWrite.getOpType() == BatchedCommandRequest::BatchType_Delete );
+            _stats->numDeleted += stats.n;
+            if ( !error ) {
+                _le->recordDelete( stats.n );
             }
         }
 

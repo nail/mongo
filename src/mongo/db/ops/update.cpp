@@ -630,6 +630,12 @@ namespace mongo {
                 continue;
             }
 
+            // We count how many documents we scanned even though we may skip those that are
+            // deemed duplicated. The final 'numMatched' and 'nscanned' numbers may differ for
+            // that reason.
+            // XXX: pull this out of the plan.
+            opDebug->nscanned++;
+
             // Found a matching document
             numMatched++;
 
@@ -820,7 +826,7 @@ namespace mongo {
 
         // TODO: Can this be simplified?
         if ((numMatched > 0) || (numMatched == 0 && !request.isUpsert()) ) {
-            opDebug->nupdated = numMatched;
+            opDebug->nMatched = numMatched;
             return UpdateResult(numMatched > 0 /* updated existing object(s) */,
                                 !driver->isDocReplacement() /* $mod or obj replacement */,
                                 numMatched /* # of docments update, even no-ops */,
@@ -902,7 +908,7 @@ namespace mongo {
                    NULL, NULL, request.isFromMigration(), &newObj);
         }
 
-        opDebug->nupdated = 1;
+        opDebug->nMatched = 1;
         return UpdateResult(false /* updated a non existing document */,
                             !driver->isDocReplacement() /* $mod or obj replacement? */,
                             1 /* count of updated documents */,
