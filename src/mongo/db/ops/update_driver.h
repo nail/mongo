@@ -43,7 +43,7 @@ namespace mongo {
          * Returns OK and fills in '_mods' if 'updateExpr' is correct. Otherwise returns an
          * error status with a corresponding description.
          */
-        Status parse(const BSONObj& updateExpr);
+        Status parse(const BSONObj& updateExpr, const bool multi = false);
 
         /**
          * Fills in document with any fields in the query which are valid.
@@ -97,12 +97,6 @@ namespace mongo {
         bool modsAffectIndices() const;
         void refreshIndexKeys(const IndexPathSet* indexedFields);
 
-        bool multi() const;
-        void setMulti(bool multi);
-
-        bool upsert() const;
-        void setUpsert(bool upsert);
-
         bool logOp() const;
         void setLogOp(bool logOp);
 
@@ -153,12 +147,6 @@ namespace mongo {
         // mutable properties after parsing
         //
 
-        // May this driver apply updates to several documents?
-        bool _multi;
-
-        // May this driver construct a new object if an update for a non-existing one is sent?
-        bool _upsert;
-
         // Should this driver generate an oplog record when it applies the update?
         bool _logOp;
 
@@ -183,12 +171,10 @@ namespace mongo {
     };
 
     struct UpdateDriver::Options {
-        bool multi;
-        bool upsert;
         bool logOp;
         ModifierInterface::Options modOptions;
 
-        Options() : multi(false), upsert(false), logOp(false), modOptions() {}
+        Options() : logOp(false), modOptions() {}
     };
 
 } // namespace mongo
