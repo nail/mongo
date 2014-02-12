@@ -22,7 +22,6 @@
 #include "mongo/db/database.h"
 #include "mongo/db/structure/collection.h"
 #include "mongo/db/query/get_runner.h"
-#include "mongo/util/elapsed_tracker.h"
 
 namespace mongo {
 
@@ -82,16 +81,9 @@ namespace mongo {
         auto_ptr<Runner> runner(rawRunner);
         auto_ptr<DeregisterEvenIfUnderlyingCodeThrows> safety;
 
-        ElapsedTracker timeToStartYielding(256, 20);
-
         try {
             const ScopedRunnerRegistration safety(runner.get());
-
-            if (timeToStartYielding.intervalHasElapsed()) {
-                // Lazily yield, avoiding a performance regression when
-                // scanning a very small number of documents.
-                runner->setYieldPolicy(Runner::YIELD_AUTO);
-            }
+            runner->setYieldPolicy(Runner::YIELD_AUTO);
 
             long long count = 0;
             Runner::RunnerState state;
