@@ -28,7 +28,6 @@
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/util/bson_extract.h"
-#include "mongo/client/auth_helpers.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/sasl_client_session.h"
 #include "mongo/platform/cstdint.h"
@@ -38,6 +37,7 @@
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/net/hostandport.h"
+#include "mongo/util/password_digest.h"
 
 namespace mongo {
 namespace {
@@ -95,7 +95,7 @@ namespace {
             if (!status.isOK())
                 return status;
 
-            *outPassword = auth::createPasswordDigest(user, rawPassword);
+            *outPassword = mongo::createPasswordDigest(user, rawPassword);
         }
         else {
             *outPassword = rawPassword;
