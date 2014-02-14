@@ -58,10 +58,11 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
-#include "mongo/db/ops/query.h"
-#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/ops/update_driver.h"
+#include "mongo/db/ops/update_executor.h"
+#include "mongo/db/ops/update_request.h"
 #include "mongo/db/pagefault.h"
 #include "mongo/db/repl/is_master.h"
 #include "mongo/db/repl/oplog.h"
@@ -557,37 +558,17 @@ namespace mongo {
         op.debug().updateobj = updateobj;
         op.setQuery(query);
 
-        // This code should look quite familiar, since it is basically the prelude code in the
-        // other overload of _updateObjectsNEW. We could factor it into a common function, but
-        // that would require that we heap allocate the driver, which doesn't seem worth it
-        // right now, especially considering that we will probably rewrite much of this code in
-        // the near term.
+        UpdateRequest request(ns);
 
-        UpdateDriver::Options options;
-
-        // TODO: This is wasteful. We really shouldn't need to generate the oplog entry
-        // just to throw it away if we are not generating an oplog.
-        options.logOp = true;
-
-        // Select the right modifier options. We aren't in a replication context here, so
-        // the only question is whether this update is against the 'config' database, in
-        // which case we want to disable checks, since config db docs can have field names
-        // containing a dot (".").
-        options.modOptions = ( NamespaceString( ns ).isConfigDB() ) ?
-            ModifierInterface::Options::unchecked() :
-            ModifierInterface::Options::normal();
-
-        UpdateDriver driver( options );
-
-        status = driver.parse( toupdate, multi );
-        if ( !status.isOK() ) {
-            uasserted( 17009, status.reason() );
-        }
-
-        PageFaultRetryableSection s;
-        while ( 1 ) {
-            try {
-                Lock::DBWrite lk(ns);
+        request.setUpsert(upsert);
+        request.setMulti(multi);
+        request.setQuery(query);
+        request.setUpdates(toupdate);
+        request.setUpdateOpLog(); // TODO: This is wasteful if repl is not active.
+        UpdateLifecycleImpl updateLifecycle(broadcast, ns);
+        request.setLifecycle(&updateLifecycle);
+        UpdateExecutor executor(&request, &op.debug());
+        uassertStatusOK(executor.prepare());
 
                 // void ReplSetImpl::relinquish() uses big write lock so this is thus
                 // synchronized given our lock above.
@@ -612,14 +593,10 @@ namespace mongo {
                 request.setLifecycle(&updateLifecycle);
                 UpdateResult res = update(request, &op.debug(), &driver);
 
-                // for getlasterror
-                lastError.getSafe()->recordUpdate( res.existing , res.numMatched , res.upserted );
-                break;
-            }
-            catch ( PageFaultException& e ) {
-                e.touch();
-            }
-        }
+        UpdateResult res = executor.execute();
+
+        // for getlasterror
+        lastError.getSafe()->recordUpdate( res.existing , res.numMatched , res.upserted );
     }
 
     void receivedDelete(Message& m, CurOp& op) {

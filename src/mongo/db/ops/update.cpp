@@ -31,6 +31,7 @@
 #include "mongo/db/index_set.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update_driver.h"
+#include "mongo/db/ops/update_executor.h"
 #include "mongo/db/ops/update_lifecycle.h"
 #include "mongo/db/pagefault.h"
 #include "mongo/db/pdfile.h"
@@ -437,27 +438,8 @@ namespace mongo {
 
     UpdateResult update(const UpdateRequest& request, OpDebug* opDebug) {
 
-        // Should the modifiers validate their embedded docs via okForStorage
-        // Only user updates should be checked. Any system or replication stuff should pass through.
-        // Config db docs shouldn't get checked for valid field names since the shard key can have
-        // a dot (".") in it.
-        bool shouldValidate = !(request.isFromReplication() ||
-                                request.getNamespaceString().isConfigDB() ||
-                                request.isFromMigration());
-
-        // TODO: Consider some sort of unification between the UpdateDriver, ModifierInterface
-        // and UpdateRequest structures.
-        UpdateDriver::Options opts;
-        opts.logOp = request.shouldCallLogOp();
-        opts.modOptions = ModifierInterface::Options(request.isFromReplication(), shouldValidate);
-        UpdateDriver driver(opts);
-
-        Status status = driver.parse(request.getUpdates(), request.isMulti());
-        if (!status.isOK()) {
-            uasserted(16840, status.reason());
-        }
-
-        return update(request, opDebug, &driver);
+        UpdateExecutor executor(&request, opDebug);
+        return executor.execute();
     }
 
     UpdateResult update(const UpdateRequest& request, OpDebug* opDebug, UpdateDriver* driver) {
@@ -659,6 +641,7 @@ namespace mongo {
                 MatchDetails matchDetails;
                 matchDetails.requestElemMatchKey();
 
+                dassert(cq);
                 verify(cq->root()->matchesBSON(oldObj, &matchDetails));
 
                 string matchedField;
