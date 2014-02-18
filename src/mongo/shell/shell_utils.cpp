@@ -20,6 +20,8 @@
 #include "mongo/shell/shell_utils.h"
 
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/catalog/index_key_validate.h"
+#include "mongo/db/index/external_key_generator.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils_extended.h"
 #include "mongo/shell/shell_utils_launcher.h"
@@ -133,6 +135,45 @@ namespace mongo {
             return BSON( "" << b.done() );
         }
 
+        BSONObj keyTooLong(const BSONObj& a, void* data) {
+            BSONObj index = a[0]["index"].Obj();
+            BSONObj doc = a[0]["doc"].Obj();
+            BSONObjSet keys;
+            getKeysForUpgradeChecking(index, doc, &keys);
+            for (BSONObjSet::const_iterator key = keys.begin(); key != keys.end(); ++key) { 
+                if (key->objsize() > 1024) {
+                    return BSON("" << true);
+                }
+            }                                                                           
+            return BSON("" << false);
+        }
+
+        BSONObj validateIndexKey(const BSONObj& a, void* data) {
+            BSONObj key = a[0].Obj();
+            Status indexValid = validateKeyPattern(key);
+            if (!indexValid.isOK()) {
+                return BSON("" << BSON("ok" << false << "errmsg" << indexValid.codeString()));
+            }
+            return BSON("" << BSON("ok" << true));
+        }
+
+        BSONObj replMonitorStats(const BSONObj& a, void* data) {
+            uassert(17134, "replMonitorStats requires a single string argument (the ReplSet name)",
+                    a.nFields() == 1 && a.firstElement().type() == String);
+
+            ReplicaSetMonitorPtr rsm = ReplicaSetMonitor::get(a.firstElement().valuestrsafe(),true);
+            if (!rsm) {
+                return BSON("" << "no ReplSetMonitor exists by that name");
+            }
+            BSONObjBuilder result;
+            rsm->appendInfo(result);
+            return result.obj();
+        }
+
+        BSONObj useWriteCommandsDefault(const BSONObj& a, void* data) {
+            return BSON("" << shellGlobalParams.useWriteCommandsDefault);
+        }
+
         BSONObj interpreterVersion(const BSONObj& a, void* data) {
             uassert( 16453, "interpreterVersion accepts no arguments", a.nFields() == 0 );
             return BSON( "" << globalScriptEngine->getInterpreterVersionString() );
@@ -146,6 +187,8 @@ namespace mongo {
             scope.injectNative( "_isWindows" , isWindows );
             scope.injectNative( "interpreterVersion", interpreterVersion );
             scope.injectNative( "getBuildInfo", getBuildInfo );
+            scope.injectNative( "keyTooLong", keyTooLong );
+            scope.injectNative( "validateIndexKey", validateIndexKey );
 
 #ifndef MONGO_SAFE_SHELL
             //can't launch programs

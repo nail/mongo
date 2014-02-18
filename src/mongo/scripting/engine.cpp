@@ -238,6 +238,7 @@ namespace mongo {
         extern const JSFile mongo;
         extern const JSFile mr;
         extern const JSFile query;
+        extern const JSFile upgrade_check;
         extern const JSFile utils;
         extern const JSFile utils_sh;
     }
@@ -250,6 +251,7 @@ namespace mongo {
         execSetup(JSFiles::mr);
         execSetup(JSFiles::query);
         execSetup(JSFiles::collection);
+        execSetup(JSFiles::upgrade_check);
     }
 
     /** install BenchRunner suite */
