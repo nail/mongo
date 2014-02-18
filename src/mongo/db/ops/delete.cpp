@@ -1,9 +1,12 @@
 // delete.cpp
 
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/catalog/database.h"
+#include "mongo/db/structure/catalog/namespace_details.h"
 #include "mongo/db/query/get_runner.h"
 #include "mongo/db/query/query_planner_common.h"
+#include "mongo/db/repl/is_master.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/structure/collection.h"
 
@@ -46,8 +49,11 @@ namespace mongo {
 
         string nsForLogOp = ns.toString(); // XXX-ERH
 
-        BSONObj obj;
-        BSONObj pk = cl->getSimplePKFromQuery(pattern);
+        uassert(ErrorCodes::NotMaster,
+                str::stream() << "Not primary while removing from " << ns,
+                !logop || isMasterNs(nsForLogOp.c_str()));
+
+        long long nDeleted = 0;
 
         CanonicalQuery* cq;
         if (!CanonicalQuery::canonicalize(ns.toString(), pattern, &cq).isOK()) {
@@ -74,8 +80,15 @@ namespace mongo {
 
         DiskLoc rloc;
         Runner::RunnerState state;
+        CurOp* curOp = cc().curop();
+        int oldYieldCount = curOp->numYields();
         while (Runner::RUNNER_ADVANCED == (state = runner->getNext(NULL, &rloc))) {
-
+            if (oldYieldCount != curOp->numYields()) {
+                uassert(ErrorCodes::NotMaster,
+                        str::stream() << "No longer primary while removing from " << ns,
+                        !logop || isMasterNs(nsForLogOp.c_str()));
+                oldYieldCount = curOp->numYields();
+            }
             BSONObj toDelete;
 
             // XXX: do we want to buffer docs and delete them in a group rather than

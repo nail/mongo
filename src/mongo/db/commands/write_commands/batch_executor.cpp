@@ -24,6 +24,11 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/pagefault.h"
+#include "mongo/db/repl/is_master.h"
+#include "mongo/db/repl/oplog.h"
+#include "mongo/db/repl/replication_server_status.h"
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/stats/counters.h"
 
 namespace mongo {
@@ -241,11 +246,56 @@ namespace mongo {
         return true;
     }
 
-    bool WriteBatchExecutor::applyWriteBatch(const WriteBatch& writeBatch,
-                                             BSONArrayBuilder* resultsArray) {
-        bool batchSuccess = true;
-        for (size_t i = 0; i < writeBatch.getNumWriteItems(); ++i) {
-            const WriteBatch::WriteItem& writeItem = writeBatch.getWriteItem(i);
+    static bool checkIsMasterForCollection(const NamespaceString& ns, WriteErrorDetail** error) {
+        if (!isMasterNs(ns.ns().c_str())) {
+            WriteErrorDetail* errorDetail = *error = new WriteErrorDetail;
+            errorDetail->setErrCode(ErrorCodes::NotMaster);
+            errorDetail->setErrMessage(std::string(mongoutils::str::stream() <<
+                                                   "Not primary while writing to " << ns.ns()));
+            return false;
+        }
+        return true;
+    }
+
+    static void buildUniqueIndexError( const BSONObj& keyPattern,
+                                       const BSONObj& indexPattern,
+                                       WriteErrorDetail* error ) {
+        error->setErrCode( ErrorCodes::CannotCreateIndex );
+        string errMsg = stream() << "cannot create unique index over " << indexPattern
+                                 << " with shard key pattern " << keyPattern;
+        error->setErrMessage( errMsg );
+    }
+
+    static bool checkIndexConstraints( ShardingState* shardingState,
+                                       const BatchedCommandRequest& request,
+                                       WriteErrorDetail** error ) {
+
+        const NamespaceString nss( request.getTargetingNS() );
+        Lock::assertWriteLocked( nss.ns() );
+
+        if ( !request.isUniqueIndexRequest() )
+            return true;
+
+        if ( shardingState->enabled() ) {
+
+            CollectionMetadataPtr metadata = shardingState->getCollectionMetadata( nss.ns() );
+
+            if ( metadata ) {
+                if ( !isUniqueIndexCompatible( metadata->getKeyPattern(),
+                                               request.getIndexKeyPattern() ) ) {
+
+                    *error = new WriteErrorDetail;
+                    buildUniqueIndexError( metadata->getKeyPattern(),
+                                           request.getIndexKeyPattern(),
+                                           *error );
+
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 
             // All writes in the batch must be of the same type:
             dassert(writeBatch.getWriteType() == writeItem.getWriteType());
@@ -429,7 +479,56 @@ namespace mongo {
 
         _opCounters->gotInsert();
 
-        opDebug.op = dbInsert;
+            WriteOpResult currResult;
+
+            {
+                PageFaultRetryableSection pFaultSection;
+
+                ////////////////////////////////////
+                Lock::DBWrite writeLock( nss.ns() );
+                ////////////////////////////////////
+
+                // Check version inside of write lock
+
+                if ( checkIsMasterForCollection( nss, &currResult.error )
+                     && checkShardVersion( &shardingState, request, &currResult.error )
+                     && checkIndexConstraints( &shardingState, request, &currResult.error ) ) {
+
+                    //
+                    // Get the collection for the insert
+                    //
+
+                    scoped_ptr<Client::Context> writeContext;
+                    Collection* collection = NULL;
+
+                    try {
+                        // Context once we're locked, to set more details in currentOp()
+                        // TODO: better constructor?
+                        writeContext.reset( new Client::Context( request.getNS(),
+                                                                 storageGlobalParams.dbpath,
+                                                                 false /* don't check version */) );
+
+                        Database* database = writeContext->db();
+                        dassert( database );
+                        collection = database->getCollection( nss.ns() );
+
+                        if ( !collection ) {
+                            // Implicitly create if it doesn't exist
+                            collection = database->createCollection( nss.ns() );
+                            if ( !collection ) {
+                                currResult.error =
+                                    toWriteError( Status( ErrorCodes::InternalError,
+                                                          "could not create collection" ) );
+                            }
+                        }
+                    }
+                    catch ( const DBException& ex ) {
+                        currResult.error = toWriteError( ex.toStatus() );
+                    }
+
+                    //
+                    // Perform writes inside write lock
+                    //
 
         BSONObj doc;
 

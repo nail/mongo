@@ -574,12 +574,10 @@ namespace mongo {
                 // synchronized given our lock above.
                 uassert( 17010 ,  "not master", isMasterNs( ns ) );
 
-                // if this ever moves to outside of lock, need to adjust check
-                // Client::Context::_finishInit
-                if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
-                    return;
-
-                Client::Context ctx( ns );
+        // if this ever moves to outside of lock, need to adjust check
+        // Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+            return;
 
                 const NamespaceString requestNs(ns);
                 UpdateRequest request(requestNs);
@@ -614,17 +612,26 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        const bool justOne = flags & RemoveOption_JustOne;
-        const bool broadcast = flags & RemoveOption_Broadcast;
+        PageFaultRetryableSection s;
+        while ( 1 ) {
+            try {
+                Lock::DBWrite lk(ns.ns());
 
-        OpSettings settings;
-        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        settings.setJustOne(justOne);
-        cc().setOpSettings(settings);
-
-        Client::ShardedOperationScope sc;
-        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
-            return;
+                // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+                if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+                    return;
+                
+                Client::Context ctx(ns);
+                
+                long long n = deleteObjects(ns.ns(), pattern, justOne, true);
+                lastError.getSafe()->recordDelete( n );
+                op.debug().ndeleted = n;
+                break;
+            }
+            catch ( PageFaultException& e ) {
+                LOG(2) << "recordDelete got a PageFaultException" << endl;
+                e.touch();
+            }
         }
 
         LOCK_REASON(lockReason, "delete");
