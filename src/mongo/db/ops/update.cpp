@@ -748,12 +748,10 @@ namespace mongo {
                     runner->restoreState());
 
             // Call logOp if requested.
-            if (request.shouldCallLogOp()) {
-                if (driver->isDocReplacement() || !logObj.isEmpty()) {
-                    BSONObj idQuery = driver->makeOplogEntryQuery(newObj, request.isMulti());
-                    logOp("u", nsString.ns().c_str(), logObj , &idQuery,
-                          NULL, request.isFromMigration(), &newObj);
-                }
+            if (request.shouldCallLogOp() && !logObj.isEmpty()) {
+                BSONObj idQuery = driver->makeOplogEntryQuery(newObj, request.isMulti());
+                logOp("u", nsString.ns().c_str(), logObj , &idQuery,
+                      NULL, request.isFromMigration(), &newObj);
             }
 
             // If it was noop since the document didn't change, record that.
