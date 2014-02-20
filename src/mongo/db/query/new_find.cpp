@@ -485,6 +485,59 @@ namespace mongo {
                                            shardingState.getVersion(pq.ns()));
         }
 
+        // Used to fill in explain and to determine if the query is slow enough to be logged.
+        int elapsedMillis = curop.elapsedMillis();
+
+        // Get explain information if:
+        // 1) it is needed by an explain query;
+        // 2) profiling is enabled; or
+        // 3) profiling is disabled but we still need explain details to log a "slow" query.
+        // Producing explain information is expensive and should be done only if we are certain
+        // the information will be used.
+        boost::scoped_ptr<TypeExplain> explain(NULL);
+        if (isExplain ||
+            ctx.ctx().db()->getProfilingLevel() > 0 ||
+            elapsedMillis > serverGlobalParams.slowMS) {
+            // Ask the runner to produce explain information.
+            TypeExplain* bareExplain;
+            Status res = runner->getInfo(&bareExplain, NULL);
+            if (res.isOK()) {
+                explain.reset(bareExplain);
+            }
+            else if (isExplain) {
+                error() << "could not produce explain of query '" << pq.getFilter()
+                        << "', error: " << res.reason();
+                // If numResults and the data in bb don't correspond, we'll crash later when rooting
+                // through the reply msg.
+                BSONObj emptyObj;
+                bb.appendBuf((void*)emptyObj.objdata(), emptyObj.objsize());
+                // The explain output is actually a result.
+                numResults = 1;
+                // TODO: we can fill out millis etc. here just fine even if the plan screwed up.
+            }
+        }
+
+        // Fill in the missing run-time fields in explain, starting with propeties of
+        // the process running the query.
+        if (isExplain && NULL != explain.get()) {
+            std::string server = mongoutils::str::stream()
+                << getHostNameCached() << ":" << serverGlobalParams.port;
+            explain->setServer(server);
+
+            // We might have skipped some results due to chunk migration etc. so our count is
+            // correct.
+            explain->setN(numResults);
+
+            // Clock the whole operation.
+            explain->setMillis(elapsedMillis);
+
+            BSONObj explainObj = explain->toBSON();
+            bb.appendBuf((void*)explainObj.objdata(), explainObj.objsize());
+
+            // The explain output is actually a result.
+            numResults = 1;
+        }
+
         long long ccId = 0;
         if (saveClientCursor) {
             // We won't use the runner until it's getMore'd.
@@ -536,6 +589,32 @@ namespace mongo {
         // curop.debug().nscanned = ( cursor ? cursor->nscanned() : 0LL );
         curop.debug().ntoskip = pq.getSkip();
         curop.debug().nreturned = numResults;
+        if (NULL != explain.get()) {
+            if (explain->isScanAndOrderSet()) {
+                curop.debug().scanAndOrder = explain->getScanAndOrder();
+            }
+            else {
+                curop.debug().scanAndOrder = false;
+            }
+
+            if (explain->isNScannedSet()) {
+                curop.debug().nscanned = explain->getNScanned();
+            }
+
+            if (explain->isNScannedObjectsSet()) {
+                curop.debug().nscannedObjects = explain->getNScannedObjects();
+            }
+
+            if (explain->isIDHackSet()) {
+                curop.debug().idhack = explain->getIDHack();
+            }
+
+            if (!explain->stats.isEmpty()) {
+                // execStats is a CachedBSONObj because it lives in the race-prone
+                // curop.
+                curop.debug().execStats.set(explain->stats);
+            }
+        }
 
         // curop.debug().exhaust is set above.
         return curop.debug().exhaust ? pq.ns() : "";
