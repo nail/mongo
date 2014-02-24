@@ -858,11 +858,19 @@ namespace mongo {
 
         // Calling createFromQuery will populate the 'doc' with fields from the query which
         // creates the base of the update for the inserterd doc (because upsert was true)
-        uassertStatusOK(driver->populateDocumentWithQueryFields(cq, doc));
-        if (!driver->isDocReplacement()) {
-            opDebug->fastmodinsert = true;
-            // We need all the fields from the query to compare against for validation below.
-            original = doc.getObject();
+        if (cq) {
+            uassertStatusOK(driver->populateDocumentWithQueryFields(cq, doc));
+            // Validate the base doc, as taken from the query -- no fields means validate all.
+            FieldRefSet noFields;
+            uassertStatusOK(validate(BSONObj(), noFields, doc, NULL, driver->modOptions()));
+            if (!driver->isDocReplacement()) {
+                opDebug->fastmodinsert = true;
+                // We need all the fields from the query to compare against for validation below.
+                original = doc.getObject();
+            }
+            else {
+                original = request.getQuery();
+            }
         }
         else {
             original = request.getQuery();
@@ -885,6 +893,7 @@ namespace mongo {
             if (const UpdateLifecycle* lifecycle = request.getLifecycle())
                 immutableFields = lifecycle->getImmutableFields();
 
+            // This will only validate the modified fields if not a replacement.
             uassertStatusOK(validate(original,
                                      updatedFields,
                                      doc,
