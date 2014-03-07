@@ -20,8 +20,10 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/lasterror.h"
-#include "mongo/db/ops/delete.h"
-#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete_executor.h"
+#include "mongo/db/ops/delete_request.h"
+#include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update_executor.h"
 #include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/pagefault.h"
 #include "mongo/db/repl/is_master.h"
@@ -523,7 +525,11 @@ namespace mongo {
                         }
                     }
                     catch ( const DBException& ex ) {
-                        currResult.error = toWriteError( ex.toStatus() );
+                        Status status(ex.toStatus());
+                        if (ErrorCodes::isInterruption(status.code())) {
+                            throw;
+                        }
+                        currResult.error = toWriteError(status);
                     }
 
                     //
@@ -553,44 +559,27 @@ namespace mongo {
         return true;
     }
 
-    bool WriteBatchExecutor::applyUpdate(const string& ns,
-                                         const WriteBatch::WriteItem& writeItem,
-                                         CurOp* currentOp) {
-        OpDebug& opDebug = currentOp->debug();
+    void WriteBatchExecutor::execRemove( const BatchItemRef& removeItem,
+                                         WriteErrorDetail** error ) {
 
-        _opCounters->gotUpdate();
+        // Removes are similar to updates, but page faults are handled externally
+
+        // BEGIN CURRENT OP
+        scoped_ptr<CurOp> currentOp( beginCurrentOp( _client, removeItem ) );
+        incOpStats( removeItem );
 
         BSONObj queryObj;
         BSONObj updateObj;
         bool multi;
         bool upsert;
 
-        string errMsg;
-        bool ret = writeItem.parseUpdateItem(&errMsg, &queryObj, &updateObj, &multi, &upsert);
-        verify(ret); // writeItem should have been already validated by WriteBatch::parse().
+        while ( true ) {
+            multiRemove( removeItem, &result );
 
-        currentOp->setQuery(queryObj);
-        opDebug.op = dbUpdate;
-        opDebug.query = queryObj;
-
-        bool resExisting = false;
-        long long resNum = 0;
-        BSONObj resUpserted;
-        try {
-
-            const NamespaceString requestNs(ns);
-            UpdateRequest request(requestNs);
-
-            request.setQuery(queryObj);
-            request.setUpdates(updateObj);
-            request.setUpsert(upsert);
-            request.setMulti(multi);
-            request.setUpdateOpLog();
-            // TODO(greg) We need to send if we are ignoring the shard version below, but for now yes
-            UpdateLifecycleImpl updateLifecycle(true, requestNs);
-            request.setLifecycle(&updateLifecycle);
-
-            UpdateResult res = update(request, &opDebug);
+            if ( !result.fault ) {
+                incWriteStats( removeItem, result.stats, result.error, currentOp.get() );
+                break;
+            }
 
             resExisting = res.existing;
             resNum = res.numMatched;
@@ -604,7 +593,29 @@ namespace mongo {
             return false;
         }
 
-        _le->recordUpdate(resExisting, resNum, resUpserted);
+            // XXX - are we 100% sure that all !OK statuses do not write a document?
+            StatusWith<DiskLoc> status = collection->insertDocument( normalInsert, true );
+
+            if ( !status.isOK() ) {
+                result->error = toWriteError( status.getStatus() );
+            }
+            else {
+                logOp( "i", insertNS.c_str(), normalInsert );
+                getDur().commitIfNeeded();
+                result->stats.n = 1;
+            }
+        }
+        catch ( const PageFaultException& ex ) {
+            // TODO: An actual data structure that's not an exception for this
+            result->fault = new PageFaultException( ex );
+        }
+        catch ( const DBException& ex ) {
+            Status status(ex.toStatus());
+            if (ErrorCodes::isInterruption(status.code())) {
+                throw;
+            }
+            result->error = toWriteError(status);
+        }
 
         return true;
     }
@@ -614,9 +625,49 @@ namespace mongo {
                                          CurOp* currentOp) {
         OpDebug& opDebug = currentOp->debug();
 
-        _opCounters->gotDelete();
+            if ( status.code() == ErrorCodes::IndexAlreadyExists ) {
+                result->stats.n = 0;
+            }
+            else if ( !status.isOK() ) {
+                result->error = toWriteError( status );
+            }
+            else {
+                logOp( "i", indexNS.c_str(), normalIndexDesc );
+                result->stats.n = 1;
+            }
+        }
+        catch ( const PageFaultException& ex ) {
+            // TODO: An actual data structure that's not an exception for this
+            result->fault = new PageFaultException( ex );
+        }
+        catch ( const DBException& ex ) {
+            Status status = ex.toStatus();
+            if (ErrorCodes::isInterruption(status.code())) {
+                throw;
+            }
+            result->error = toWriteError(status);
+        }
+    }
 
-        BSONObj queryObj;
+    static void multiUpdate( const BatchItemRef& updateItem,
+                             WriteOpResult* result ) {
+
+        const NamespaceString nsString(updateItem.getRequest()->getNS());
+        UpdateRequest request(nsString);
+        request.setQuery(updateItem.getUpdate()->getQuery());
+        request.setUpdates(updateItem.getUpdate()->getUpdateExpr());
+        request.setMulti(updateItem.getUpdate()->getMulti());
+        request.setUpsert(updateItem.getUpdate()->getUpsert());
+        request.setUpdateOpLog(true);
+        UpdateLifecycleImpl updateLifecycle(true, request.getNamespaceString());
+        request.setLifecycle(&updateLifecycle);
+
+        UpdateExecutor executor(&request, &cc().curop()->debug());
+        Status status = executor.prepare();
+        if (!status.isOK()) {
+            result->error = toWriteError(status);
+            return;
+        }
 
         string errMsg;
         bool ret = writeItem.parseDeleteItem(&errMsg, &queryObj);
@@ -629,22 +680,74 @@ namespace mongo {
         long long n;
 
         try {
-            n = deleteObjects(ns.c_str(),
-                              queryObj,
-                              /*justOne*/false,
-                              /*logOp*/true,
-                              /*god*/false,
-                              /*rs*/NULL);
+            UpdateResult res = executor.execute();
+
+            const long long numDocsModified = res.numDocsModified;
+            const long long numMatched = res.numMatched;
+            const BSONObj resUpsertedID = res.upserted;
+
+            // We have an _id from an insert
+            const bool didInsert = !resUpsertedID.isEmpty();
+
+            result->stats.nModified = didInsert ? 0 : numDocsModified;
+            result->stats.n = didInsert ? 1 : numMatched;
+            result->stats.upsertedID = resUpsertedID;
         }
-        catch (UserException& e) {
-            opDebug.exceptionInfo = e.getInfo();
-            return false;
+        catch (const DBException& ex) {
+            status = ex.toStatus();
+            if (ErrorCodes::isInterruption(status.code())) {
+                throw;
+            }
+            result->error = toWriteError(status);
         }
 
-        _le->recordDelete(n);
-        opDebug.ndeleted = n;
+        const NamespaceString nss( removeItem.getRequest()->getNS() );
+        DeleteRequest request( nss );
+        request.setQuery( removeItem.getDelete()->getQuery() );
+        request.setMulti( removeItem.getDelete()->getLimit() != 1 );
+        request.setUpdateOpLog(true);
+        request.setGod( false );
+        DeleteExecutor executor( &request );
+        Status status = executor.prepare();
+        if ( !status.isOK() ) {
+            result->error = toWriteError( status );
+            return;
+        }
 
-        return true;
+        // NOTE: Deletes will not fault outside the lock once any data has been written
+        PageFaultRetryableSection pFaultSection;
+
+        ///////////////////////////////////////////
+        Lock::DBWrite writeLock( nss.ns() );
+        ///////////////////////////////////////////
+
+        // Check version once we're locked
+
+        if ( !checkShardVersion( &shardingState, *removeItem.getRequest(), &result->error ) ) {
+            // Version error
+            return;
+        }
+
+        // Context once we're locked, to set more details in currentOp()
+        // TODO: better constructor?
+        Client::Context writeContext( nss.ns(),
+                                      storageGlobalParams.dbpath,
+                                      false /* don't check version */);
+
+        try {
+            result->stats.n = executor.execute();
+        }
+        catch ( const PageFaultException& ex ) {
+            // TODO: An actual data structure that's not an exception for this
+            result->fault = new PageFaultException( ex );
+        }
+        catch ( const DBException& ex ) {
+            status = ex.toStatus();
+            if (ErrorCodes::isInterruption(status.code())) {
+                throw;
+            }
+            result->error = toWriteError(status);
+        }
     }
 
 } // namespace mongo
