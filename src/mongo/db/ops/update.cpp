@@ -35,9 +35,8 @@
 #include "mongo/db/ops/update_lifecycle.h"
 #include "mongo/db/pagefault.h"
 #include "mongo/db/pdfile.h"
-#include "mongo/db/query_optimizer.h"
-#include "mongo/db/query_runner.h"
-#include "mongo/db/query/new_find.h"
+#include "mongo/db/query/get_runner.h"
+#include "mongo/db/query/lite_parsed_query.h"
 #include "mongo/db/query/query_planner_common.h"
 #include "mongo/db/query/runner_yield_policy.h"
 #include "mongo/db/queryutil.h"
@@ -478,7 +477,11 @@ namespace mongo {
         return executor.execute();
     }
 
-    UpdateResult update(const UpdateRequest& request, OpDebug* opDebug, UpdateDriver* driver) {
+    UpdateResult update(
+            const UpdateRequest& request,
+            OpDebug* opDebug,
+            UpdateDriver* driver,
+            CanonicalQuery* cq) {
 
         LOG(3) << "processing update : " << request;
         const NamespaceString& nsString = request.getNamespaceString();
@@ -528,17 +531,8 @@ namespace mongo {
         // TODO: Old code checks this repeatedly within the update loop. Is that necessary? It seems
         // that once atomic should be always atomic.
         const bool isolated =
-            cursor->ok() &&
-            cursor->matcher() &&
-            cursor->matcher()->docMatcher().atomic();
-
-        // The 'cursor' the optimizer gave us may contain query plans that generate duplicate
-        // diskloc's. We set up here the mechanims that will prevent us from processing those
-        // twice if we see them. We also set up a 'ClientCursor' so that we can support
-        // yielding.
-        //
-        // TODO: Is it valid to call this on a non-ok cursor?
-        const bool dedupHere = cursor->autoDedup();
+            (cq && QueryPlannerCommon::hasNode(cq->root(), MatchExpression::ATOMIC)) ||
+            LiteParsedQuery::isQueryIsolated(request.getQuery());
 
         //
         // We'll start assuming we have one or more documents for this update. (Otherwise,
