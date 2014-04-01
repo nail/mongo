@@ -1573,17 +1573,17 @@ namespace mongo {
         switch( fdwCtrlType ) {
 
         case CTRL_C_EVENT:
-            rawOut( "Ctrl-C signal" );
+            log() << "Ctrl-C signal";
             consoleTerminate( "CTRL_C_EVENT" );
             return TRUE ;
 
         case CTRL_CLOSE_EVENT:
-            rawOut( "CTRL_CLOSE_EVENT signal" );
+            log() << "CTRL_CLOSE_EVENT signal";
             consoleTerminate( "CTRL_CLOSE_EVENT" );
             return TRUE ;
 
         case CTRL_BREAK_EVENT:
-            rawOut( "CTRL_BREAK_EVENT signal" );
+            log() << "CTRL_BREAK_EVENT signal";
             consoleTerminate( "CTRL_BREAK_EVENT" );
             return TRUE;
 
@@ -1592,7 +1592,7 @@ namespace mongo {
             return FALSE;
 
         case CTRL_SHUTDOWN_EVENT:
-            rawOut( "CTRL_SHUTDOWN_EVENT signal" );
+            log() << "CTRL_SHUTDOWN_EVENT signal";
             consoleTerminate( "CTRL_SHUTDOWN_EVENT" );
             return TRUE;
 
