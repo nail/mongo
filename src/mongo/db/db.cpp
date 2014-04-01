@@ -82,7 +82,7 @@
 #include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/scopeguard.h"
-#include "mongo/util/signal_win32.h"
+#include "mongo/util/signal_handlers.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/text.h"
@@ -1389,6 +1389,10 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
 
 static int mongoDbMain(int argc, char* argv[], char **envp) {
     static StaticObserver staticObserver;
+
+#if defined(_WIN32)
+    mongo::reportEventToSystem = &mongo::reportEventToSystemImpl;
+#endif
 
     getcurns = ourgetns;
 

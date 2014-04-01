@@ -55,7 +55,6 @@
 #include "mongo/util/ramlog.h"
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/signal_handlers.h"
-#include "mongo/util/signal_win32.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/log.h"
 #include "mongo/util/exception_filter_win32.h"
@@ -289,7 +288,6 @@ namespace mongo {
 using namespace mongo;
 
 static bool runMongosServer( bool doUpgrade ) {
-    setupSignalHandlers();
     setThreadName( "mongosMain" );
     printShardingVersionInfo( false );
 
@@ -518,6 +516,8 @@ static int _main() {
     if (!initializeServerGlobalState())
         return EXIT_FAILURE;
 
+    startSignalProcessingThread();
+
     // we either have a setting where all processes are in localhost or none are
     for ( vector<string>::const_iterator it = configdbs.begin() ; it != configdbs.end() ; ++it ) {
         try {
@@ -566,6 +566,8 @@ int main(int argc, char* argv[], char** envp) {
     static StaticObserver staticObserver;
     if (argc < 1)
         ::_exit(EXIT_FAILURE);
+
+    setupSignalHandlers();
 
     mongosCommand = argv[0];
 

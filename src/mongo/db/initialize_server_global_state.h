@@ -42,6 +42,4 @@ namespace mongo {
      */
     bool initializeServerGlobalState(bool isMongodShutdownSpecialCase = false);
 
-    void setupCoreSignals();
-
 }  // namespace mongo
