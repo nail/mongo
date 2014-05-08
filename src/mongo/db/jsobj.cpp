@@ -876,11 +876,8 @@ namespace mongo {
         return b.obj();
     }
 
-    Status BSONObj::_okForStorage(bool root, bool deep) const {
+    bool BSONObj::okForStorage() const {
         BSONObjIterator i( *this );
-
-        // The first field is special in the case of a DBRef where the first field must be $ref
-        bool first = true;
         while ( i.more() ) {
             BSONElement e = i.next();
             const char * name = e.fieldName();
@@ -893,49 +890,29 @@ namespace mongo {
                     ;
             }
 
-            // Do not allow "." in the field name
-            if (strchr(name, '.')) {
-                return Status(ErrorCodes::DottedFieldName,
-                              str::stream() << name << " is not valid for storage.");
+            // check no regexp for _id (SERVER-9502)
+            if (mongoutils::str::equals(e.fieldName(), "_id")) {
+                if (e.type() == RegEx) {
+                    return false;
+                }
             }
 
-            // (SERVER-9502) Do not allow storing an _id field with a RegEx type or
-            // Array type in a root document
-            if (root && (e.type() == RegEx || e.type() == Array || e.type() == Undefined)
-                     && str::equals(name,"_id")) {
-                return Status(ErrorCodes::InvalidIdField,
-                              str::stream() << name
-                                            << " is not valid for storage because it is of type "
-                                            << typeName(e.type()));
-            }
-
-            if ( deep && e.mayEncapsulate() ) {
+            if ( e.mayEncapsulate() ) {
                 switch ( e.type() ) {
                 case Object:
                 case Array:
-                    {
-                        Status s = e.embeddedObject()._okForStorage(false, true);
-                        // TODO: combine field names for better error messages
-                        if ( ! s.isOK() )
-                            return s;
-                    }
+                    if ( ! e.embeddedObject().okForStorage() )
+                        return false;
                     break;
                 case CodeWScope:
-                    {
-                        Status s = e.codeWScopeObject()._okForStorage(false, true);
-                        // TODO: combine field names for better error messages
-                        if ( ! s.isOK() )
-                            return s;
-                    }
+                    if ( ! e.codeWScopeObject().okForStorage() )
+                        return false;
                     break;
                 default:
                     uassert( 12579, "unhandled cases in BSONObj okForStorage" , 0 );
                 }
 
             }
-
-            // After we have processed one field, we are no longer on the first field
-            first = false;
         }
         return true;
     }

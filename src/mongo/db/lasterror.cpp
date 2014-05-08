@@ -78,9 +78,9 @@ namespace mongo {
             b.append( "code" , code );
         if ( updatedExisting != NotUpdate )
             b.appendBool( "updatedExisting", updatedExisting == True );
-        if ( !upsertedId.isEmpty() ) {
-            b.append( upsertedId[kUpsertedFieldName] );
-        }
+        if ( upsertedId.isSet() )
+            b.append( "upserted" , upsertedId );
+
         b.appendNumber( "n", nObjects );
 
         return ! msg.empty();

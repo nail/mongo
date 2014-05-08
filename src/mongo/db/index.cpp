@@ -29,8 +29,9 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/repl/rs.h"
-#include "mongo/db/structure/collection.h"
-#include "mongo/util/scopeguard.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/storage/key.h"
+#include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/stringutils.h"
 
@@ -289,24 +290,17 @@ namespace mongo {
         return -1;
     }
 
-    /* delete this index.  does NOT clean up the system catalog
-       (system.indexes or system.namespaces) -- only NamespaceIndex.
-       TOOD: above comment is wrong, also, document durability assumptions
-    */
-    void IndexDetails::kill_idx() {
-        string ns = indexNamespace(); // e.g. foo.coll.$ts_1
-        try {
+    void IndexDetailsBase::kill_idx() {
+        const string ns = indexNamespace();
 
-            string pns = parentNS(); // note we need a copy, as parentNS() won't work after the drop() below
-            string name = indexName(); // ts_1
+        close();
+        storage::db_remove(ns);
+    }
 
-            Database* db = cc().database();
-
-            Collection* parentCollection = db->getCollection( pns );
-
-            // clean up parent namespace index cache
-            if ( parentCollection )
-                parentCollection->infoCache()->reset();
+    bool IndexDetailsBase::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+        if (!_db->changeAttributes(info, wasBuilder)) {
+            return false;
+        }
 
         BSONObj was = wasBuilder.done();
         // need to merge new values in
