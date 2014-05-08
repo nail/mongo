@@ -457,20 +457,12 @@ namespace {
         return _authenticatedPrincipals.lookup(name);
     }
 
-    Status AuthorizationManager::updateAuthzDocuments(const NamespaceString& collectionName,
-                                                      const BSONObj& query,
-                                                      const BSONObj& updatePattern,
-                                                      bool upsert,
-                                                      bool multi,
-                                                      const BSONObj& writeConcern,
-                                                      int* nMatched) const {
-        return _externalState->update(collectionName,
-                                      query,
-                                      updatePattern,
-                                      upsert,
-                                      multi,
-                                      writeConcern,
-                                      nMatched);
+    void AuthorizationManager::logoutDatabase(const std::string& dbname) {
+        Principal* principal = _authenticatedPrincipals.lookupByDBName(dbname);
+        if (!principal)
+            return;
+        _acquiredPrivileges.revokePrivilegesFromPrincipal(principal->getName());
+        _authenticatedPrincipals.removeByDBName(dbname);
     }
 
     PrincipalSet::NameIterator AuthorizationManager::getAuthenticatedPrincipalNames() {
