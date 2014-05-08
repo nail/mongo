@@ -16,8 +16,10 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_string.h"
+#pragma once
+
+#include "mongo/pch.h"
+#include "mongo/bson/bsonobj.h"
 
 namespace mongo {
 

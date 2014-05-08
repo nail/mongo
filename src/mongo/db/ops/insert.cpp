@@ -25,36 +25,28 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/structure/catalog/namespace.h"
+#include "mongo/db/oplog_helpers.h"
+#include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
-    using namespace mongoutils;
-
-    StatusWith<BSONObj> fixDocumentForInsert( const BSONObj& doc ) {
-        if ( doc.objsize() > BSONObjMaxUserSize )
-            return StatusWith<BSONObj>( ErrorCodes::BadValue,
-                                        str::stream()
-                                        << "object to insert too large"
-                                        << ". size in bytes: " << doc.objsize()
-                                        << ", max size: " << BSONObjMaxUserSize );
-
-        bool firstElementIsId = doc.firstElement().fieldNameStringData() == "_id";
-        bool hasTimestampToFix = false;
-        {
-            BSONObjIterator i( doc );
-            while ( i.more() ) {
-                BSONElement e = i.next();
-
-                if ( e.type() == Timestamp && e.timestampValue() == 0 ) {
-                    // we replace Timestamp(0,0) at the top level with a correct value
-                    // in the fast pass, we just mark that we want to swap
-                    hasTimestampToFix = true;
-                    break;
-                }
-
-                const char* fieldName = e.fieldName();
+    void validateInsert(const BSONObj &obj) {
+        uassert(10059, "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
+        for (BSONObjIterator i(obj); i.more(); ) {
+            const BSONElement e = i.next();
+            // check no $ modifiers.  note we only check top level.
+            // (scanning deep would be quite expensive)
+            uassert(13511, "document to insert can't have $ fields", e.fieldName()[0] != '$');
+            if (str::equals(e.fieldName(), "_id")) {
+                // Note: Collections whose primary key is something other than _id will need to manually
+                //       check for multikeys and regexes. See IndexedCollection::extractPrimaryKey()
+                uassert(16440, "can't use an array for _id", e.type() != Array);
+                uassert(17033, "can't use a regex for _id", e.type() != RegEx);
+                uassert(17211, "can't use undefined for _id", e.type() != Undefined);
+            }
+        }
+    }
 
     void insertOneObject(Collection *cl, BSONObj &obj, uint64_t flags) {
         validateInsert(obj);
@@ -90,41 +82,17 @@ namespace mongo {
                         }
                         cl->notifyOfWriteOp();
                     }
-                    if ( e.type() == Array ) {
-                        return StatusWith<BSONObj>( ErrorCodes::BadValue,
-                                                    "can't use an array for _id" );
-                    }
-                    if ( e.type() == Object ) {
-                        BSONObj o = e.Obj();
-                        Status s = o.storageValidEmbedded();
-                        if ( !s.isOK() )
-                            return StatusWith<BSONObj>( s );
+                }
+                else {
+                    insertOneObject(cl, objModified, flags); // may add _id field
+                    if (logop) {
+                        OplogHelpers::logInsert(ns, objModified, fromMigrate);
                     }
                 }
-
-            }
-        }
-
-        if ( firstElementIsId && !hasTimestampToFix )
-            return StatusWith<BSONObj>( BSONObj() );
-
-        bool hadId = firstElementIsId;
-
-        BSONObjIterator i( doc );
-
-        BSONObjBuilder b( doc.objsize() + 16 );
-        if ( firstElementIsId ) {
-            b.append( doc.firstElement() );
-            i.next();
-        }
-        else {
-            BSONElement e = doc["_id"];
-            if ( e.type() ) {
-                b.append( e );
-                hadId = true;
-            }
-            else {
-                b.appendOID( "_id", NULL, true );
+            } catch (const UserException &) {
+                if (!keepGoing || i == objs.size() - 1) {
+                    throw;
+                }
             }
         }
     }
@@ -139,54 +107,39 @@ namespace mongo {
             } else {
                 b.append(e);
             }
-            else {
-                b.append( e );
-            }
         }
         return b.obj();
     }
 
-    Status userAllowedWriteNS( const NamespaceString& ns ) {
-        return userAllowedWriteNS( ns.db(), ns.coll() );
-    }
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate) {
+        StringData _ns(ns);
+        if (NamespaceString::isSystem(_ns)) {
+            StringData db = nsToDatabaseSubstring(_ns);
+            massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
+            uassert(10095, "attempt to insert in reserved database name 'system'", db != "system");
+            massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
 
-    Status userAllowedWriteNS( const StringData& db, const StringData& coll ) {
-        // validity checking
+            // Trying to insert into a system collection.  Fancy side-effects go here:
+            if (nsToCollectionSubstring(ns) == "system.indexes") {
+                BSONObj obj = stripDropDups(objs[0]);
+                StringData collns = obj["ns"].Stringdata();
+                uassert(17314, mongoutils::str::stream() << "cannot build index on incorrect ns " << collns
+                        << " for current database " << db, nsToDatabaseSubstring(collns) == db);
+                Collection *cl = getOrCreateCollection(collns, logop);
+                bool ok = cl->ensureIndex(obj);
+                if (!ok) {
+                    // Already had that index
+                    return;
+                }
 
-        if ( db.size() == 0 )
-            return Status( ErrorCodes::BadValue, "db cannot be blank" );
-
-        if ( !NamespaceString::validDBName( db ) )
-            return Status( ErrorCodes::BadValue, "invalid db name" );
-
-        if ( coll.size() == 0 )
-            return Status( ErrorCodes::BadValue, "collection cannot be blank" );
-
-        if ( !NamespaceString::validCollectionName( coll ) )
-            return Status( ErrorCodes::BadValue, "invalid collection name" );
-
-        if ( db.size() + 1 /* dot */ + coll.size() > Namespace::MaxNsColletionLen )
-            return Status( ErrorCodes::BadValue,
-                           str::stream()
-                             << "fully qualified namespace " << db << '.' << coll << " is too long "
-                             << "(max is " << Namespace::MaxNsColletionLen << " bytes)" );
-
-        // check spceial areas
-
-        if ( db == "system" )
-            return Status( ErrorCodes::BadValue, "cannot use 'system' database" );
-
-
-        if ( coll.startsWith( "system." ) ) {
-            if ( coll == "system.indexes" ) return Status::OK();
-            if ( coll == "system.js" ) return Status::OK();
-            if ( coll == "system.profile" ) return Status::OK();
-            if ( coll == "system.users" ) return Status::OK();
-            if ( db == "admin" ) {
-                if ( coll == "system.version" ) return Status::OK();
-                if ( coll == "system.roles" ) return Status::OK();
-                if ( coll == "system.new_users" ) return Status::OK();
-                if ( coll == "system.backup_users" ) return Status::OK();
+                // Now we have to actually insert that document into system.indexes, we may have
+                // modified it with stripDropDups.
+                vector<BSONObj> newObjs;
+                newObjs.push_back(obj);
+                _insertObjects(ns, newObjs, keepGoing, flags, logop, fromMigrate);
+                return;
+            } else if (!legalClientSystemNS(ns, true)) {
+                uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
             }
         }
         _insertObjects(ns, objs, keepGoing, flags, logop, fromMigrate);
