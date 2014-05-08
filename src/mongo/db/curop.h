@@ -66,12 +66,9 @@ namespace mongo {
         long long nscanned;
         bool idhack;         // indicates short circuited code path on an update to make the update faster
         bool scanAndOrder;   // scanandorder query plan aspect was used
-        long long  nupdated; // number of records updated (including no-ops)
-        long long  nupdateNoops; // number of records updated which were noops
-        long long  nmoved;   // updates resulted in a move (moves are expensive)
-        long long  ninserted;
-        long long  ndeleted;
-        bool fastmod;
+        long long nupdated; // number of records updated
+        long long ninserted;
+        long long ndeleted;
         bool fastmodinsert;  // upsert of an $operation. builds a default object
         bool upsert;         // true if the update actually did an insert
         int keyUpdates;
@@ -149,78 +146,6 @@ namespace mongo {
         mutable SpinLock _lock;
         int * _size;
         char _buf[512];
-    };
-
-    /* lifespan is different than CurOp because of recursives with DBDirectClient */
-    class OpDebug {
-    public:
-        OpDebug() : ns(""){ reset(); }
-
-        void reset();
-
-        void recordStats();
-
-        string report( const CurOp& curop ) const;
-
-        /**
-         * Appends stored data and information from curop to the builder.
-         *
-         * @param curop information about the current operation which will be
-         *     use to append data to the builder.
-         * @param builder the BSON builder to use for appending data. Data can
-         *     still be appended even if this method returns false.
-         * @param maxSize the maximum allowed combined size for the query object
-         *     and update object
-         *
-         * @return false if the sum of the sizes for the query object and update
-         *     object exceeded maxSize
-         */
-        bool append(const CurOp& curop, BSONObjBuilder& builder, size_t maxSize) const;
-
-        // -------------------
-        
-        StringBuilder extra; // weird things we need to fix later
-        
-        // basic options
-        int op;
-        bool iscommand;
-        Namespace ns;
-        BSONObj query;
-        BSONObj updateobj;
-        
-        // detailed options
-        long long cursorid;
-        int ntoreturn;
-        int ntoskip;
-        bool exhaust;
-
-        // debugging/profile info
-        long long nscanned;
-        long long nscannedObjects;
-        bool idhack;         // indicates short circuited code path on an update to make the update faster
-        bool scanAndOrder;   // scanandorder query plan aspect was used
-        long long  nMatched; // number of records updated (including no-ops)
-        long long  nModified; // number of records written (no no-ops)
-        long long  nmoved;   // updates resulted in a move (moves are expensive)
-        long long  ninserted;
-        long long  ndeleted;
-        bool fastmod;
-        bool fastmodinsert;  // upsert of an $operation. builds a default object
-        bool upsert;         // true if the update actually did an insert
-        int keyUpdates;
-        ThreadSafeString planSummary; // a brief string describing the query solution
-
-        // New Query Framework debugging/profiling info
-        // TODO: should this really be an opaque BSONObj?  Not sure.
-        CachedBSONObj execStats;
-
-        // error handling
-        ExceptionInfo exceptionInfo;
-        
-        // response info
-        int executionTime;
-        int nreturned;
-        int responseLength;
     };
 
     /* Current operation (for the current Client).
@@ -328,54 +253,6 @@ namespace mongo {
         // a writebacklisten for example will block for 30s 
         // so this should be 30000 in that case
         long long _expectedLatencyMs; 
-
-        /** Nested class that implements a time limit ($maxTimeMS) for a CurOp object. */
-        class MaxTimeTracker {
-            MONGO_DISALLOW_COPYING(MaxTimeTracker);
-        public:
-            /** Newly-constructed MaxTimeTracker objects have the time limit disabled. */
-            MaxTimeTracker();
-
-            /** Disables the time limit. */
-            void reset();
-
-            /** Returns whether or not the time limit is enabled. */
-            bool isEnabled() { return _enabled; }
-
-            /**
-             * Enables the time limit to be "durationMicros" microseconds from "startEpochMicros"
-             * (units of microseconds since the epoch).
-             *
-             * "durationMicros" must be nonzero.
-             */
-            void setTimeLimit(uint64_t startEpochMicros, uint64_t durationMicros);
-
-            /**
-             * Checks whether the time limit has been hit.  Returns false if not, or if the time
-             * limit is disabled.
-             */
-            bool checkTimeLimit();
-
-            /**
-             * Returns the number of microseconds remaining for the time limit, or the special
-             * value 0 if the time limit is disabled.
-             *
-             * Calling this method is more expensive than calling its sibling "checkInterval()",
-             * since an accurate measure of remaining time needs to be calculated.
-             */
-            uint64_t getRemainingMicros() const;
-        private:
-            // Whether or not this operation is subject to a time limit.
-            bool _enabled;
-
-            // Point in time at which the time limit is hit.  Units of microseconds since the
-            // epoch.
-            uint64_t _targetEpochMicros;
-
-            // Approximate point in time at which the time limit is hit.   Units of milliseconds
-            // since the server process was started.
-            int64_t _approxTargetServerMillis;
-        } _maxTimeTracker;
-
+                                     
     };
 }

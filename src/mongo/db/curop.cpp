@@ -21,23 +21,8 @@
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/database.h"
-#include "mongo/db/kill_current_op.h"
-#include "mongo/util/fail_point_service.h"
 
 namespace mongo {
-
-    // Enabling the maxTimeAlwaysTimeOut fail point will cause any query or command run with a valid
-    // non-zero max time to fail immediately.  Any getmore operation on a cursor already created
-    // with a valid non-zero max time will also fail immediately.
-    //
-    // This fail point cannot be used with the maxTimeNeverTimeOut fail point.
-    MONGO_FP_DECLARE(maxTimeAlwaysTimeOut);
-
-    // Enabling the maxTimeNeverTimeOut fail point will cause the server to never time out any
-    // query, command, or getmore operation, regardless of whether a max time is set.
-    //
-    // This fail point cannot be used with the maxTimeAlwaysTimeOut fail point.
-    MONGO_FP_DECLARE(maxTimeNeverTimeOut);
 
     // todo : move more here
 
@@ -192,60 +177,6 @@ namespace mongo {
         return b.obj();
     }
 
-    BSONObj CurOp::description() {
-        BSONObjBuilder bob;
-        bool a = _active && _start;
-        bob.append("active", a);
-        bob.append( "op" , opToString( _op ) );
-        bob.append("ns", _ns);
-        if (_op == dbInsert) {
-            _query.append(bob, "insert");
-        }
-        else {
-            _query.append(bob, "query");
-        }
-        if( killPending() )
-            bob.append("killPending", true);
-        return bob.obj();
-    }
-
-    void CurOp::setKillWaiterFlags() {
-        for (size_t i = 0; i < _notifyList.size(); ++i)
-            *(_notifyList[i]) = true;
-        _notifyList.clear();
-    }
-
-    void CurOp::kill(bool* pNotifyFlag /* = NULL */) {
-        _killPending.store(1);
-        if (pNotifyFlag) {
-            _notifyList.push_back(pNotifyFlag);
-        }
-    }
-
-    void CurOp::setMaxTimeMicros(uint64_t maxTimeMicros) {
-        if (maxTimeMicros == 0) {
-            // 0 is "allow to run indefinitely".
-            return;
-        }
-
-        // Note that calling startTime() will set CurOp::_start if it hasn't been set yet.
-        _maxTimeTracker.setTimeLimit(startTime(), maxTimeMicros);
-    }
-
-    bool CurOp::maxTimeHasExpired() {
-        if (MONGO_FAIL_POINT(maxTimeNeverTimeOut)) {
-            return false;
-        }
-        if (_maxTimeTracker.isEnabled() && MONGO_FAIL_POINT(maxTimeAlwaysTimeOut)) {
-            return true;
-        }
-        return _maxTimeTracker.checkTimeLimit();
-    }
-
-    uint64_t CurOp::getRemainingMaxTimeMicros() const {
-        return _maxTimeTracker.getRemainingMicros();
-    }
-
     AtomicUInt CurOp::_nextOpNum;
 
     static Counter64 returnedCounter;
@@ -253,15 +184,12 @@ namespace mongo {
     static Counter64 updatedCounter;
     static Counter64 deletedCounter;
     static Counter64 scannedCounter;
-    static Counter64 scannedObjectCounter;
 
     static ServerStatusMetricField<Counter64> displayReturned( "document.returned", &returnedCounter );
     static ServerStatusMetricField<Counter64> displayUpdated( "document.updated", &updatedCounter );
     static ServerStatusMetricField<Counter64> displayInserted( "document.inserted", &insertedCounter );
     static ServerStatusMetricField<Counter64> displayDeleted( "document.deleted", &deletedCounter );
     static ServerStatusMetricField<Counter64> displayScanned( "queryExecutor.scanned", &scannedCounter );
-    static ServerStatusMetricField<Counter64> displayScannedObjects( "queryExecutor.scannedObjects",
-                                                                     &scannedObjectCounter );
 
     static Counter64 idhackCounter;
     static Counter64 scanAndOrderCounter;
@@ -275,14 +203,12 @@ namespace mongo {
             returnedCounter.increment( nreturned );
         if ( ninserted > 0 )
             insertedCounter.increment( ninserted );
-        if ( nMatched > 0 )
-            updatedCounter.increment( nMatched );
+        if ( nupdated > 0 )
+            updatedCounter.increment( nupdated );
         if ( ndeleted > 0 )
             deletedCounter.increment( ndeleted );
         if ( nscanned > 0 )
             scannedCounter.increment( nscanned );
-        if ( nscannedObjects > 0 )
-            scannedObjectCounter.increment( nscannedObjects );
 
         if ( idhack )
             idhackCounter.increment();

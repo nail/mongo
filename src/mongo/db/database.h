@@ -61,57 +61,6 @@ namespace mongo {
          */
         bool setProfilingLevel( int newLevel , string& errmsg );
 
-        void flushFiles( bool sync ) { return _extentManager.flushFiles( sync ); }
-
-        /**
-         * @return true if ns is part of the database
-         *         ns=foo.bar, db=foo returns true
-         */
-        bool ownsNS( const string& ns ) const {
-            if ( ! startsWith( ns , _name ) )
-                return false;
-            return ns[_name.size()] == '.';
-        }
-
-        const RecordStats& recordStats() const { return _recordStats; }
-        RecordStats& recordStats() { return _recordStats; }
-
-        int getProfilingLevel() const { return _profile; }
-        const char* getProfilingNS() const { return _profileName.c_str(); }
-
-        CCByLoc& ccByLoc() { return _ccByLoc; }
-
-        const NamespaceIndex& namespaceIndex() const { return _namespaceIndex; }
-        NamespaceIndex& namespaceIndex() { return _namespaceIndex; }
-
-        // TODO: do not think this method should exist, so should try and encapsulate better
-        ExtentManager& getExtentManager() { return _extentManager; }
-        const ExtentManager& getExtentManager() const { return _extentManager; }
-
-        Status dropCollection( const StringData& fullns );
-
-        Collection* createCollection( const StringData& ns,
-                                      bool capped = true,
-                                      const BSONObj* options = NULL,
-                                      bool allocateDefaultSpace = true );
-
-        /**
-         * @param ns - this is fully qualified, which is maybe not ideal ???
-         */
-        Collection* getCollection( const StringData& ns );
-
-        Status renameCollection( const StringData& fromNS, const StringData& toNS, bool stayTemp );
-
-        /**
-         * @return name of an existing database with same text name but different
-         * casing, if one exists.  Otherwise the empty string is returned.  If
-         * 'duplicates' is specified, it is filled with all duplicate names.
-         */
-        static string duplicateUncasedName( bool inholderlockalready, const string &name, const string &path, set< string > *duplicates = 0 );
-
-        static Status validateDBName( const StringData& dbname );
-
-        const string& getSystemIndexesName() const { return _indexesName; }
     private:
         const string _name;
         const string _path;

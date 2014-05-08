@@ -28,19 +28,9 @@
 
 namespace mongo {
 
-
-    Database::~Database() {
-        verify( Lock::isW() );
-        _magic = 0;
-        if( _ccByLoc.size() ) {
-            log() << "\n\n\nWARNING: ccByLoc not empty on database close! "
-                  << _ccByLoc.size() << ' ' << _name << endl;
-        }
-
-        for ( CollectionMap::iterator i = _collections.begin(); i != _collections.end(); ++i ) {
-            delete i->second;
-        }
-        _collections.clear();
+    DatabaseHolder _dbHolder;
+    DatabaseHolder& dbHolderUnchecked() {
+        return _dbHolder;
     }
 
     Database::Database(const StringData &name, const StringData &path)
@@ -125,152 +115,11 @@ namespace mongo {
         return true;
     }
 
-    Status Database::dropCollection( const StringData& fullns ) {
-        LOG(1) << "dropCollection: " << fullns << endl;
-
-        Collection* collection = getCollection( fullns );
-        if ( !collection ) {
-            // collection doesn't exist
-            return Status::OK();
-        }
-
-        _initForWrites();
-
-        {
-            NamespaceString s( fullns );
-            verify( s.db() == _name );
-
-            if( s.isSystem() ) {
-                if( s.coll() == "system.profile" ) {
-                    if ( _profile != 0 )
-                        return Status( ErrorCodes::IllegalOperation,
-                                       "turn off profiling before dropping system.profile collection" );
-                }
-                else {
-                    return Status( ErrorCodes::IllegalOperation, "can't drop system ns" );
-                }
-            }
-        }
-
-        BackgroundOperation::assertNoBgOpInProgForNs( fullns );
-
-        if ( collection->_details->getTotalIndexCount() > 0 ) {
-            try {
-                string errmsg;
-                BSONObjBuilder result;
-
-                if ( !dropIndexes( collection->_details, fullns, "*", errmsg, result, true) ) {
-                    warning() << "could not drop collection: " << fullns
-                              << " because of " << errmsg << endl;
-                    return Status( ErrorCodes::InternalError, errmsg );
-                }
-            }
-            catch( DBException& e ) {
-                stringstream ss;
-                ss << "drop: dropIndexes for collection failed - consider trying repair ";
-                ss << " cause: " << e.what();
-                warning() << ss.str() << endl;
-                return Status( ErrorCodes::InternalError, ss.str() );
-            }
-            verify( collection->_details->getTotalIndexCount() == 0 );
-        }
-        LOG(1) << "\t dropIndexes done" << endl;
-
-        ClientCursor::invalidate( fullns );
-        Top::global.collectionDropped( fullns );
-
-        Status s = _dropNS( fullns );
-
-        _clearCollectionCache( fullns ); // we want to do this always
-
-        if ( !s.isOK() )
-            return s;
-
-        DEV {
-            // check all index collection entries are gone
-            string nstocheck = fullns.toString() + ".$";
-            scoped_lock lk( _collectionLock );
-            for ( CollectionMap::iterator i = _collections.begin();
-                  i != _collections.end();
-                  ++i ) {
-                string temp = i->first;
-                if ( temp.find( nstocheck ) != 0 )
-                    continue;
-                log() << "after drop, bad cache entries for: "
-                      << fullns << " have " << temp;
-                verify(0);
-            }
-        }
-
-        return Status::OK();
-    }
-
-    void Database::_clearCollectionCache( const StringData& fullns ) {
-        scoped_lock lk( _collectionLock );
-        _clearCollectionCache_inlock( fullns );
-    }
-
-    void Database::_clearCollectionCache_inlock( const StringData& fullns ) {
-        verify( _name == nsToDatabaseSubstring( fullns ) );
-        CollectionMap::iterator it = _collections.find( fullns.toString() );
-        if ( it == _collections.end() )
-            return;
-
-        delete it->second;
-        _collections.erase( it );
-    }
-
-    Collection* Database::getCollection( const StringData& ns ) {
-        verify( _name == nsToDatabaseSubstring( ns ) );
-
-        scoped_lock lk( _collectionLock );
-
-        string myns = ns.toString();
-
-        CollectionMap::const_iterator it = _collections.find( myns );
-        if ( it != _collections.end() ) {
-            if ( it->second ) {
-                DEV {
-                    NamespaceDetails* details = _namespaceIndex.details( ns );
-                    if ( details != it->second->_details ) {
-                        log() << "about to crash for mismatch on ns: " << ns
-                              << " current: " << (void*)details
-                              << " cached: " << (void*)it->second->_details;
-                    }
-                    verify( details == it->second->_details );
-                }
-                return it->second;
-            }
-        }
-
-        NamespaceDetails* details = _namespaceIndex.details( ns );
-        if ( !details ) {
-            return NULL;
-        }
-
-        Collection* c = new Collection( ns, details, this );
-        _collections[myns] = c;
-        return c;
-    }
-
-
-
-    Status Database::renameCollection( const StringData& fromNS, const StringData& toNS,
-                                       bool stayTemp ) {
-
-        // move data namespace
-        Status s = _renameSingleNamespace( fromNS, toNS, stayTemp );
-        if ( !s.isOK() )
-            return s;
-
-        NamespaceDetails* details = _namespaceIndex.details( toNS );
-        verify( details );
-
-        // move index namespaces
-        string indexName = _name + ".system.indexes";
-        BSONObj oldIndexSpec;
-        while( Helpers::findOne( indexName, BSON( "ns" << fromNS ), oldIndexSpec ) ) {
-            oldIndexSpec = oldIndexSpec.getOwned();
+    /* db - database name
+       path - db directory
+    */
+    void Database::closeDatabase( const StringData &name, const StringData &path ) {
+        verify( Lock::isW() );
 
         Client::Context * ctx = cc().getContext();
         verify( ctx );
@@ -311,32 +160,11 @@ namespace mongo {
 
         // Try first holding a shared lock
         {
-            scoped_lock lk( _collectionLock );
-            _clearCollectionCache_inlock( fromNSString );
-            _clearCollectionCache_inlock( toNSString );
-        }
-
-        ClientCursor::invalidate( fromNSString.c_str() );
-        ClientCursor::invalidate( toNSString.c_str() );
-
-        // at this point, we haven't done anything destructive yet
-
-        // ----
-        // actually start moving
-        // ----
-
-        // this could throw, but if it does we're ok
-        _namespaceIndex.add_ns( toNS, fromDetails );
-        NamespaceDetails* toDetails = _namespaceIndex.details( toNS );
-
-        try {
-            toDetails->copyingFrom(toNSString.c_str(), fromDetails); // fixes extraOffset
-        }
-        catch( DBException& ) {
-            // could end up here if .ns is full - if so try to clean up / roll back a little
-            _namespaceIndex.kill_ns( toNSString );
-            _clearCollectionCache(toNSString);
-            throw;
+            SimpleRWLock::Shared lk(_rwlock);
+            db = _get(ns, path);
+            if (db != NULL) {
+                return db;
+            }
         }
 
         // If we didn't find it, take an exclusive lock and check
