@@ -39,8 +39,7 @@ namespace mongo {
 
             LOG(3) << "single query: " << q.ns << "  " << q.query << "  ntoreturn: " << q.ntoreturn << " options : " << q.queryOptions << endl;
 
-            // Regular queries are handled in strategy_shard.cpp
-            verify( NamespaceString( r.getns() ).isCommand() );
+            verify(r.isCommand()); // Regular queries are handled in strategy_shard.cpp
 
             if ( handleSpecialNamespaces( r , q ) )
                 return;
@@ -97,7 +96,9 @@ namespace mongo {
                     if( loops < 4 ) versionManager.forceRemoteCheckShardVersionCB( staleNS );
                 }
                 catch ( AssertionException& e ) {
-                    Command::appendCommandStatus(builder, e.toStatus());
+                    e.getInfo().append( builder , "assertion" , "assertionCode" );
+                    builder.append( "errmsg" , "db assertion failure" );
+                    builder.append( "ok" , 0 );
                     BSONObj x = builder.done();
                     replyToQuery(0, r.p(), r.m(), x);
                     return;

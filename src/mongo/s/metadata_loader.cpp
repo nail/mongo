@@ -144,10 +144,7 @@ namespace mongo {
 
         if (!collDoc.getKeyPattern().isEmpty()) {
 
-            metadata->_keyPattern = collInfo.getKeyPattern();
-            metadata->fillKeyPatternFields();
-            metadata->_shardVersion = ChunkVersion( 0, 0, collInfo.getEpoch() );
-            metadata->_collVersion = ChunkVersion( 0, 0, collInfo.getEpoch() );
+            manager->_key = collDoc.getKeyPattern();
 
             if(!initChunks(collDoc, ns, shard, oldManager, manager, errMsg)){
                 return false;
@@ -155,15 +152,12 @@ namespace mongo {
         }
         else if(collDoc.getPrimary() == shard) {
 
-            // Empty primary field not allowed if set
-            dassert( collInfo.getPrimary() != "" );
+            if (shard == "") {
+                warning() << "shard not verified, assuming collection "
+                          << ns << " is unsharded on this shard" << endl;
+            }
 
-            metadata->_keyPattern = BSONObj();
-            metadata->fillKeyPatternFields();
-            metadata->_shardVersion = ChunkVersion( 1, 0, collInfo.getEpoch() );
-            metadata->_collVersion = metadata->_shardVersion;
-
-            manager->_keyPattern = BSONObj();
+            manager->_key = BSONObj();
             manager->_maxShardVersion = ChunkVersion(1, 0, collDoc.getEpoch());
             manager->_maxCollVersion = manager->_maxShardVersion;
         }

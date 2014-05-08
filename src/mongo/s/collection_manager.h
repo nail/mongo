@@ -88,11 +88,12 @@ namespace mongo {
         //
 
         /**
-         * Returns true the document key 'key' belongs to this chunkset. Recall that documents of
+         * Returns true the document 'doc' belongs to this chunkset. Recall that documents of
          * an in-flight chunk migration may be present and should not be considered part of the
-         * collection / chunkset yet. Key must be the full shard key.
+         * collection / chunkset yet. 'doc' must contain the sharding key and, optionally,
+         * other attributes.
          */
-        bool keyBelongsToMe( const BSONObj& key ) const;
+        bool belongsToMe(const BSONObj& doc) const;
 
         /**
          * Given the chunk's min key (or empty doc) in 'lookupKey', gets the boundaries of the
@@ -114,7 +115,7 @@ namespace mongo {
 
         ChunkVersion getMaxShardVersion() const { return _maxShardVersion; }
 
-        BSONObj getKeyPattern() const { return _keyPattern; }
+        BSONObj getKey() const { return _key; }
 
         size_t getNumChunks() const { return _chunksMap.size(); }
 
@@ -137,7 +138,7 @@ namespace mongo {
         ChunkVersion _maxShardVersion;
 
         // key pattern for chunks under this range
-        BSONObj _keyPattern;
+        BSONObj _key;
 
         // a map from a min key into the chunk's (or range's) max boundary
         typedef map< BSONObj, BSONObj , BSONObjCmp > RangeMap;

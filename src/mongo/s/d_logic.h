@@ -33,6 +33,8 @@ namespace mongo {
     //class DiskLoc;
     struct DbResponse;
 
+    typedef ChunkVersion ConfigVersion;
+
     // --------------
     // --- global state ---
     // --------------
@@ -62,8 +64,8 @@ namespace mongo {
         // versioning support
 
         bool hasVersion( const string& ns );
-        bool hasVersion( const string& ns , ChunkVersion& version );
-        const ChunkVersion getVersion( const string& ns ) const;
+        bool hasVersion( const string& ns , ConfigVersion& version );
+        const ConfigVersion getVersion( const string& ns ) const;
 
         /**
          * Uninstalls the manager for a given collection. This should be used when the collection is dropped.
@@ -90,7 +92,7 @@ namespace mongo {
          * @param version (IN) the client believe this collection is on and (OUT) the version the manager is actually in
          * @return true if the access can be allowed at the provided version
          */
-        bool trySetVersion( const string& ns , ChunkVersion& version );
+        bool trySetVersion( const string& ns , ConfigVersion& version );
 
         void appendInfo( BSONObjBuilder& b );
 
@@ -216,8 +218,8 @@ namespace mongo {
         bool hasID() const { return _id.isSet(); }
         void setID( const OID& id );
 
-        const ChunkVersion getVersion( const string& ns ) const;
-        void setVersion( const string& ns , const ChunkVersion& version );
+        const ConfigVersion getVersion( const string& ns ) const;
+        void setVersion( const string& ns , const ConfigVersion& version );
 
         static ShardedConnectionInfo* get( bool create );
         static void reset();
@@ -235,7 +237,7 @@ namespace mongo {
         OID _id;
         bool _forceVersionOk; // if this is true, then chunk version #s aren't check, and all ops are allowed
 
-        typedef map<string,ChunkVersion> NSVersionMap;
+        typedef map<string,ConfigVersion> NSVersionMap;
         NSVersionMap _versions;
 
         static boost::thread_specific_ptr<ShardedConnectionInfo> _tl;
@@ -271,10 +273,7 @@ namespace mongo {
      * @return true if the current threads shard version is ok, or not in sharded version
      * Also returns an error message and the Config/ChunkVersions causing conflicts
      */
-    bool shardVersionOk( const string& ns,
-                         string& errmsg,
-                         ChunkVersion& received,
-                         ChunkVersion& wanted );
+    bool shardVersionOk( const string& ns , string& errmsg, ConfigVersion& received, ConfigVersion& wanted );
 
     /**
      * MustHandleShardedMessage encapsulates the information we need to return to the client when we detect a chunk version problem.

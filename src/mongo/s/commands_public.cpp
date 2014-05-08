@@ -601,10 +601,6 @@ namespace mongo {
                     countCmdBuilder.append( "limit", limit );
                 }
 
-                if (cmdObj.hasField("hint")) {
-                    countCmdBuilder.append(cmdObj["hint"]);
-                }
-
                 if (cmdObj.hasField("$queryOptions")) {
                     countCmdBuilder.append(cmdObj["$queryOptions"]);
                 }
