@@ -63,8 +63,9 @@ namespace mongo {
         const BSONObj& getOrder() const { return _order; }
         const BSONObj& getHint() const { return _hint; }
         int getMaxScan() const { return _maxScan; }
-        int getMaxTimeMS() const { return _maxTimeMS; }
-
+        
+        bool couldBeCommand() const;
+        
         bool hasIndexSpecifier() const;
         
         /* if ntoreturn is zero, we return up to 101 objects.  on the subsequent getmore, there
@@ -104,7 +105,6 @@ namespace mongo {
         BSONObj _max;
         BSONObj _hint;
         int _maxScan;
-        int _maxTimeMS;
     };
 
 } // namespace mongo

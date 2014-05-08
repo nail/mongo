@@ -107,28 +107,10 @@ namespace mongo {
         void getOplogReader(OplogReader& r);
         // Evaluate if the current sync target is still good
         bool shouldChangeSyncTarget();
-        // check lastOpTimeWritten against the remote's earliest op, filling in remoteOldestOp.
-        bool isStale(OplogReader& r, BSONObj& remoteOldestOp);
-
-        // Tracker thread
-        // tells the sync target where this member is synced to
-        void markOplog();
-        bool hasCursor();
-
-        // Sets _oplogMarkerTarget and calls connect();
-        // used for both the notifier command and the older OplogReader style notifier
-        bool connectOplogNotifier();
-
-        bool isAssumingPrimary();
 
         bool hasCursor();
         void verifySettled();
     public:
-        // stop syncing when this becomes a primary
-        void stop();
-        // restart syncing
-        void start();
-
         static BackgroundSync* get();
         void shutdown();
         virtual ~BackgroundSync() {}
@@ -144,11 +126,22 @@ namespace mongo {
         // For monitoring
         BSONObj getCounters();
 
-        // Wait for replication to finish and buffer to be applied so that the member can become
-        // primary.
-        void stopReplicationAndFlushBuffer();
+        // for when we are assuming a primary
+        // or we are going  into maintenance mode or we are blocking sync
+        // When called, this must hold the replica set lock. It cannot hold a
+        // global write lock because it will be waiting for the applier thread
+        // to complete work. The applier thread needs to grab various DB
+        // locks to complete work. This is why grabbing a global write lock
+        // is out of the question. Instead, we use the rslock to ensure that
+        // only one thread is stopping this at a time.
+        void stopOpSyncThread();
 
-        bool isPaused();
+        // for when we become a secondary. We may be transitioning from
+        // maintenance mode or from being a primary. This may hold the
+        // global write lock if it wishes to, but it is not necessary. Only the
+        // rslock is necessary.
+        void startOpSyncThread();
+
     };
 
 

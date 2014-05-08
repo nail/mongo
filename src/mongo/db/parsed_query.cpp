@@ -21,7 +21,6 @@
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/projection.h"
 #include "mongo/db/ops/query.h"
-#include "mongo/db/query/lite_parsed_query.h"
 #include "mongo/util/assert_util.h"
 
 namespace mongo {
@@ -47,6 +46,11 @@ namespace mongo {
         _options( queryoptions ) {
         init( query );
         initFields( fields );
+    }
+
+    bool ParsedQuery::couldBeCommand() const {
+        /* we assume you are using findOne() for running a cmd... */
+        return _ntoreturn == 1 && strstr( _ns , ".$cmd" );
     }
 
     bool ParsedQuery::hasIndexSpecifier() const {
@@ -98,6 +102,8 @@ namespace mongo {
             _filter = q;
         }
 
+        _filter = _filter.getOwned();
+
         _hasReadPref = q.hasField(Query::ReadPrefField.name());
     }
 
@@ -106,7 +112,6 @@ namespace mongo {
         _explain = false;
         _returnKey = false;
         _maxScan = 0;
-        _maxTimeMS = 0;
     }
 
     /* This is for languages whose "objects" are not well ordered (JSON is well ordered).
@@ -166,17 +171,6 @@ namespace mongo {
                     _returnKey = e.trueValue();
                 else if ( strcmp( "maxScan" , name ) == 0 )
                     _maxScan = e.numberInt();
-                }
-                else if ( strcmp( "showDiskLoc" , name ) == 0 ) {
-                    _showDiskLoc = e.trueValue();
-                }
-                else if ( strcmp( "maxTimeMS" , name ) == 0 ) {
-                    StatusWith<int> maxTimeMS = LiteParsedQuery::parseMaxTimeMS(e);
-                    uassert(17131,
-                            maxTimeMS.getStatus().reason(),
-                            maxTimeMS.isOK());
-                    _maxTimeMS = maxTimeMS.getValue();
-                }
                 else if ( strcmp( "comment" , name ) == 0 ) {
                     ; // no-op
                 }
