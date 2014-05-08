@@ -297,15 +297,6 @@ namespace mongo {
         void updateSlaveLocation( CurOp& curop );
 
         unsigned idleTime() const { return _idleAgeMillis; }
-
-        uint64_t getLeftoverMaxTimeMicros() const { return _leftoverMaxTimeMicros; }
-        void setLeftoverMaxTimeMicros( uint64_t leftoverMaxTimeMicros ) {
-            _leftoverMaxTimeMicros = leftoverMaxTimeMicros;
-        }
-
-        void setDoingDeletes( bool doingDeletes ) {_doingDeletes = doingDeletes; }
-
-        void slaveReadTill( const OpTime& t ) { _slaveReadTill = t; }
         
     public: // static methods
 
@@ -359,10 +350,6 @@ namespace mongo {
         GTID _slaveReadTill;
 
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
-
-        // For time-limited operations ($maxTimeMS): time remaining for future getmore operations
-        // on the cursor.  0 if original operation had no time limit set.
-        uint64_t _leftoverMaxTimeMicros;
 
         /* 0 = normal
            1 = no timeout allowed

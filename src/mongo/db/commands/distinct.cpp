@@ -30,14 +30,12 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/kill_current_op.h"
-#include "mongo/db/query/get_runner.h"
-#include "mongo/db/query/query_planner_common.h"
-#include "mongo/db/query/type_explain.h"
+#include "mongo/db/query_optimizer.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
 
-    class DistinctCommand : public Command {
+    class DistinctCommand : public QueryCommand {
     public:
         DistinctCommand() : QueryCommand("distinct") {}
         virtual void addRequiredPrivileges(const std::string& dbname,
@@ -80,54 +78,72 @@ namespace mongo {
                 return true;
             }
 
-            CanonicalQuery* cq;
-            // XXX: project out just the field we're distinct-ing.  May be covered...
-            if (!CanonicalQuery::canonicalize(ns, query, &cq).isOK()) {
-                uasserted(17215, "Can't canonicalize query " + query.toString());
-                return 0;
+            shared_ptr<Cursor> cursor;
+            if ( ! query.isEmpty() ) {
+                cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
             }
+            else {
 
-            Runner* rawRunner;
-            if (!getRunner(cq, &rawRunner).isOK()) {
-                uasserted(17216, "Can't get runner for query " + query.toString());
-                return 0;
-            }
+                // query is empty, so lets see if we can find an index
+                // with the key so we don't have to hit the raw data
+                for (int i = 0; i < cl->nIndexes(); i++) {
+                    IndexDetails &idx = cl->idx(i);
+                    if (cl->isMultikey(i)) {
+                        continue;
+                    }
 
-            auto_ptr<Runner> runner(rawRunner);
-            auto_ptr<DeregisterEvenIfUnderlyingCodeThrows> safety;
-            ClientCursor::registerRunner(runner.get());
-            runner->setYieldPolicy(Runner::YIELD_AUTO);
-            safety.reset(new DeregisterEvenIfUnderlyingCodeThrows(runner.get()));
+                    if ( idx.inKeyPattern( key ) ) {
+                        cursor = getBestGuessCursor( ns.c_str() ,
+                                                     BSONObj() ,
+                                                     idx.keyPattern() );
+                        if( cursor.get() ) break;
+                    }
 
-            BSONObj obj;
-            Runner::RunnerState state;
-            while (Runner::RUNNER_ADVANCED == (state = runner->getNext(&obj, NULL))) {
-                BSONElementSet elts;
-                obj.getFieldsDotted(key, elts);
-
-                for (BSONElementSet::iterator it = elts.begin(); it != elts.end(); ++it) {
-                    BSONElement elt = *it;
-                    if (values.count(elt)) { continue; }
-                    int currentBufPos = bb.len();
-
-                    uassert(17217, "distinct too big, 16mb cap",
-                            (currentBufPos + elt.size() + 1024) < bufSize);
-
-                    arr.append(elt);
-                    BSONElement x(start + currentBufPos);
-                    values.insert(x);
                 }
-            }
-            TypeExplain* bareExplain;
-            Status res = runner->getExplainPlan(&bareExplain);
-            if (res.isOK()) {
-                auto_ptr<TypeExplain> explain(bareExplain);
-                if (explain->isCursorSet()) {
-                    cursorName = explain->getCursor();
+
+                if ( ! cursor.get() ) {
+                    cursor = getOptimizedCursor(ns.c_str() , query , BSONObj() );
                 }
-                n = explain->getN();
-                nscanned = explain->getNScanned();
-                nscannedObjects = explain->getNScannedObjects();
+
+            }
+
+            
+            verify( cursor );
+            string cursorName = cursor->toString();
+            
+            auto_ptr<ClientCursor> cc (new ClientCursor(QueryOption_NoCursorTimeout, cursor, ns));
+
+            for ( ; cursor->ok(); cursor->advance() ) {
+                nscanned++;
+                bool loadedRecord = false;
+
+                if ( cursor->currentMatches( &md ) && !cursor->getsetdup( cursor->currPK() ) ) {
+                    n++;
+
+                    BSONObj holder;
+                    BSONElementSet temp;
+                    loadedRecord = ! cc->getFieldsDotted( key , temp, holder );
+
+                    for ( BSONElementSet::iterator i=temp.begin(); i!=temp.end(); ++i ) {
+                        BSONElement e = *i;
+                        if ( values.count( e ) )
+                            continue;
+
+                        int now = bb.len();
+
+                        uassert(10044,  "distinct too big, 16mb cap", ( now + e.size() + 1024 ) < bufSize );
+
+                        arr.append( e );
+                        BSONElement x( start + now );
+
+                        values.insert( x );
+                    }
+                }
+
+                if ( loadedRecord || md.hasLoadedRecord() )
+                    nscannedObjects++;
+
+                RARELY killCurrentOp.checkForInterrupt();
             }
 
             verify( start == bb.buf() );
@@ -146,6 +162,7 @@ namespace mongo {
 
             return true;
         }
+
     } distinctCmd;
 
-}  // namespace mongo
+}
