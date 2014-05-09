@@ -19,7 +19,7 @@
 
 #include "mongo/pch.h"
 
-#include "util/intrusive_counter.h"
+#include "mongo/util/intrusive_counter.h"
 
 namespace mongo {
 

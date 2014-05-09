@@ -19,7 +19,7 @@
 
 #include "mongo/base/init.h"
 #include "mongo/client/dbclient.h"
-#include "util/net/httpclient.h"
+#include "mongo/util/net/httpclient.h"
 
 using namespace mongo;
 

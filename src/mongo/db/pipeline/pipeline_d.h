@@ -21,6 +21,7 @@
 
 namespace mongo {
     class DocumentSourceCursor;
+    class ExpressionContext;
     class Pipeline;
 
     /*

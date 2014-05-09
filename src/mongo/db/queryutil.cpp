@@ -14,14 +14,14 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/collection.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/util/startup_test.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/startup_test.h"
 
 namespace mongo {
 

@@ -24,7 +24,7 @@
 #include "mongo/db/collection.h"
 
 #include "mongo/pch.h"
-#include "jsobj.h"
+#include "mongo/db/jsobj.h"
 
 namespace mongo {
 

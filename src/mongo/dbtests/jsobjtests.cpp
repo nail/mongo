@@ -19,6 +19,7 @@
  */
 
 #include "mongo/pch.h"
+
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/jsobjmanipulator.h"
@@ -27,8 +28,8 @@
 #include "mongo/db/cursor.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/platform/float_utils.h"
-#include "mongo/util/stringutils.h"
 #include "mongo/util/mongoutils/checksum.h"
+#include "mongo/util/stringutils.h"
 
 namespace JsobjTests {
 

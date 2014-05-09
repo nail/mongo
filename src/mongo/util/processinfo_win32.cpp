@@ -15,13 +15,15 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "processinfo.h"
+#include "mongo/pch.h"
+
 #include <iostream>
 #include <psapi.h>
 #include <Windows.h>
 
 #include <boost/scoped_array.hpp>
+
+#include "mongo/util/processinfo.h"
 
 using namespace std;
 

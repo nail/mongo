@@ -20,11 +20,11 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/collection.h"
-#include "mongo/db/queryutil.h"
-#include "mongo/db/query_optimizer_internal.h"
-#include "mongo/db/querypattern.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
+#include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/querypattern.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/dbtests/dbtests.h"
 
 namespace QueryUtilTests {

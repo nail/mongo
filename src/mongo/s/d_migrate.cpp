@@ -23,6 +23,8 @@
    mostly around shard management and checking
  */
 
+#include "mongo/pch.h"
+
 #include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <map>

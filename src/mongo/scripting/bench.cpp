@@ -19,7 +19,7 @@
 
 
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/scripting/bench.h"
 
