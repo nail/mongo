@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <iomanip>
 #include <fstream>
 
 #include <boost/filesystem.hpp>

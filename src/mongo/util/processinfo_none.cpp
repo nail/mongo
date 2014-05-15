@@ -43,10 +43,6 @@ namespace mongo {
         return -1;
     }
 
-    string ProcessInfo::getExePath() const {
-        return "";
-    }
-
     bool ProcessInfo::checkNumaEnabled() { 
         return false;
     }

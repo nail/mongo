@@ -1,7 +1,6 @@
 // processinfo_darwin.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -16,12 +15,10 @@
  *    limitations under the License.
  */
 
-#include "../pch.h"
+#include "mongo/pch.h"
 #include "processinfo.h"
 #include "log.h"
 #include <db/jsobj.h>
-
-#include <boost/scoped_array.hpp>
 
 #include <mach/vm_statistics.h>
 #include <mach/task_info.h>
@@ -31,7 +28,6 @@
 #include <mach/task.h>
 #include <mach/vm_map.h>
 #include <mach/shared_region.h>
-#include <mach-o/dyld.h>
 #include <iostream>
 
 #include <sys/types.h>
@@ -97,17 +93,6 @@ namespace mongo {
             return 0;
         }
         return (int)( ti.resident_size / (1024 * 1024 ) );
-    }
-
-    string ProcessInfo::getExePath() const {
-        uint32_t bufsize = 128;
-        boost::scoped_array<char> path(new char[bufsize]);
-        int r;
-        while ((r = _NSGetExecutablePath(path.get(), &bufsize)) != 0) {
-            path.reset(new char[bufsize]);
-        }
-        string pathStr(path.get());
-        return pathStr;
     }
 
     void ProcessInfo::getExtraInfo(BSONObjBuilder& info) {

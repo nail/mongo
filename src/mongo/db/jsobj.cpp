@@ -18,7 +18,8 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
+
 #include "mongo/db/jsobj.h"
 
 #include <limits>
@@ -29,10 +30,9 @@
 
 #include "mongo/bson/bson_validate.h"
 #include "mongo/bson/oid.h"
-#include "mongo/bson/optime.h"
 #include "mongo/bson/util/atomic_int.h"
-#include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/json.h"
+#include "mongo/bson/optime.h"
 #include "mongo/platform/float_utils.h"
 #include "mongo/util/base64.h"
 #include "mongo/util/embedded_builder.h"
@@ -40,6 +40,7 @@
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/stringutils.h"
+#include "mongo/util/time_support.h"
 
 
 // make sure our assumptions are valid
@@ -78,15 +79,27 @@ namespace mongo {
             s << '"' << escape( string(valuestr(), valuestrsize()-1) ) << '"';
             break;
         case NumberLong:
-            s << _numberLong();
+            if (format == TenGen) {
+                s << "NumberLong(" << _numberLong() << ")";
+            }
+            else {
+                s << "{ \"$numberLong\" : \"" << _numberLong() << "\" }";
+            }
             break;
         case NumberInt:
+            if(format == JS) {
+                s << "NumberInt(" << _numberInt() << ")";
+                break;
+            }
         case NumberDouble:
             if ( number() >= -numeric_limits< double >::max() &&
                     number() <= numeric_limits< double >::max() ) {
                 s.precision( 16 );
                 s << number();
             }
+            // This is not valid JSON, but according to RFC-4627, "Numeric values that cannot be
+            // represented as sequences of digits (such as Infinity and NaN) are not permitted." so
+            // we are accepting the fact that if we have such values we cannot output valid JSON.
             else if ( mongo::isNaN(number()) ) {
                 s << "NaN";
             }
@@ -182,10 +195,11 @@ namespace mongo {
             }
             break;
         case BinData: {
-            int len = *(int *)( value() );
-            BinDataType type = BinDataType( *(char *)( (int *)( value() ) + 1 ) );
+            const int len = *( reinterpret_cast<const int*>( value() ) );
+            BinDataType type = BinDataType( *( reinterpret_cast<const unsigned char*>( value() ) +
+                                               sizeof( int ) ) );
             s << "{ \"$binary\" : \"";
-            char *start = ( char * )( value() ) + sizeof( int ) + 1;
+            const char *start = reinterpret_cast<const char*>( value() ) + sizeof( int ) + 1;
             base64::encode( s , start , len );
             s << "\", \"$type\" : \"" << hex;
             s.width( 2 );
@@ -195,22 +209,35 @@ namespace mongo {
             break;
         }
         case mongo::Date:
-            if ( format == Strict )
-                s << "{ \"$date\" : ";
-            else
-                s << "Date( ";
-            if( pretty ) {
+            if (format == Strict) {
                 Date_t d = date();
-                if( d == 0 ) s << '0';
-                else
-                    s << '"' << date().toString() << '"';
-            }
-            else
-                s << date().asInt64();
-            if ( format == Strict )
+                s << "{ \"$date\" : ";
+                if (static_cast<long long>(d.millis) < 0) {
+                    s << "{ \"$numberLong\" : \"" << static_cast<long long>(d.millis) << "\" }";
+                }
+                else {
+                    s << "\"" << dateToISOStringLocal(date()) << "\"";
+                }
                 s << " }";
-            else
+            }
+            else {
+                s << "Date( ";
+                if (pretty) {
+                    Date_t d = date();
+                    if (static_cast<long long>(d.millis) < 0) {
+                        // FIXME: This is not parseable by the shell, since it may not fit in a
+                        // float
+                        s << d.millis;
+                    }
+                    else {
+                        s << "\"" << dateToISOStringLocal(date()) << "\"";
+                    }
+                }
+                else {
+                    s << date().asInt64();
+                }
                 s << " )";
+            }
             break;
         case RegEx:
             if ( format == Strict ) {
@@ -236,14 +263,14 @@ namespace mongo {
         case CodeWScope: {
             BSONObj scope = codeWScopeObject();
             if ( ! scope.isEmpty() ) {
-                s << "{ \"$code\" : " << _asCode() << " , "
-                  << " \"$scope\" : " << scope.jsonString() << " }";
+                s << "{ \"$code\" : \"" << escape(_asCode()) << "\" , "
+                  << "\"$scope\" : " << scope.jsonString() << " }";
                 break;
             }
         }
 
         case Code:
-            s << _asCode();
+            s << "\"" << escape(_asCode()) << "\"";
             break;
 
         case Timestamp:
@@ -878,8 +905,10 @@ namespace mongo {
         return b.obj();
     }
 
-    Status BSONObj::_okForStorage(bool root) const {
+    Status BSONObj::_okForStorage(bool root, bool deep) const {
         BSONObjIterator i( *this );
+
+        // The first field is special in the case of a DBRef where the first field must be $ref
         bool first = true;
         while ( i.more() ) {
             BSONElement e = i.next();
@@ -931,12 +960,12 @@ namespace mongo {
                                             << typeName(e.type()));
             }
 
-            if ( e.mayEncapsulate() ) {
+            if ( deep && e.mayEncapsulate() ) {
                 switch ( e.type() ) {
                 case Object:
                 case Array:
                     {
-                        Status s = e.embeddedObject()._okForStorage(false);
+                        Status s = e.embeddedObject()._okForStorage(false, true);
                         // TODO: combine field names for better error messages
                         if ( ! s.isOK() )
                             return s;
@@ -944,7 +973,7 @@ namespace mongo {
                     break;
                 case CodeWScope:
                     {
-                        Status s = e.embeddedObject()._okForStorage(false);
+                        Status s = e.codeWScopeObject()._okForStorage(false, true);
                         // TODO: combine field names for better error messages
                         if ( ! s.isOK() )
                             return s;
@@ -954,6 +983,8 @@ namespace mongo {
                     uassert( 12579, "unhandled cases in BSONObj okForStorage" , 0 );
                 }
             }
+
+            // After we have processed one field, we are no longer on the first field
             first = false;
         }
         return Status::OK();
@@ -1267,7 +1298,7 @@ namespace mongo {
         case Date:
             appendDate( fieldName , numeric_limits<long long>::max() ); return;
         case Timestamp: // TODO integrate with Date SERVER-3304
-            appendTimestamp( fieldName , numeric_limits<unsigned long long>::max() ); return;
+            append( fieldName , OpTime::max() ); return;
         case Undefined: // shared with EOO
             appendUndefined( fieldName ); return;
 

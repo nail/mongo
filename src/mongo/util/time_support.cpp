@@ -194,12 +194,15 @@ namespace {
     // Check to make sure that the string only consists of digits
     bool isOnlyDigits(const StringData& toCheck) {
         StringData digits("0123456789");
+        verify(false); // TODO: fixme
+#if 0
         for (StringData::const_iterator iterator = toCheck.begin();
              iterator != toCheck.end(); iterator++) {
             if (digits.find(*iterator) == std::string::npos) {
                 return false;
             }
         }
+#endif
         return true;
     }
 
@@ -781,9 +784,7 @@ namespace {
         if( lastSleepMillis == 0 ) lastSleepMillis = 1;
         else lastSleepMillis = std::min( lastSleepMillis * 2, _maxSleepMillis );
 
-        // Store the last slept time
-        _lastSleepMillis = lastSleepMillis;
-        sleepmillis( lastSleepMillis );
+        return lastSleepMillis;
     }
 
     extern long long jsTime_virtual_skew;

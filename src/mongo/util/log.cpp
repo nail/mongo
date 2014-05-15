@@ -336,7 +336,7 @@ namespace mongo {
 
             BufBuilder b(spaceNeeded);
             char* dateStr = b.grow(24);
-            curTimeString(dateStr);
+            verify(false); //TODO: fixme curTimeString(dateStr);
             dateStr[23] = ' '; // change null char to space
 
             if (!threadName.empty()) {
@@ -441,7 +441,7 @@ namespace mongo {
         if( s.empty() ) return;
 
         char buf[64];
-        curTimeString(buf);
+        verify(false); //TODO: fixme curTimeString(buf);
         buf[23] = ' ';
         buf[24] = 0;
 

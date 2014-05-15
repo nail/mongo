@@ -1,7 +1,6 @@
 // processinfo.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -31,22 +30,31 @@ namespace mongo {
     class PidFileWiper {
     public:
         ~PidFileWiper() {
+            if (path.empty()) {
+                return;
+            }
+
             ofstream out( path.c_str() , ios_base::out );
             out.close();
         }
 
-        void write( const string& p ) {
+        bool write( const string& p ) {
             path = p;
             ofstream out( path.c_str() , ios_base::out );
             out << ProcessId::getCurrent() << endl;
-            out.close();
+            return out.good();
         }
 
         string path;
     } pidFileWiper;
 
-    void writePidFile( const string& path ) {
-        pidFileWiper.write( path );
+    bool writePidFile( const string& path ) {
+        bool e = pidFileWiper.write( path );
+        if (!e) {
+            log() << "ERROR: Cannot write pid file to " << path
+                  << ": "<< strerror(errno);
+        }
+        return e;
     }
 
     ProcessInfo::SystemInfo* ProcessInfo::systemInfo = NULL;
@@ -62,18 +70,4 @@ namespace mongo {
         return Status::OK();
     }
 
-
-    void printMemInfo( const char * where ) {
-        cout << "mem info: ";
-        if ( where )
-            cout << where << " ";
-
-        ProcessInfo pi;
-        if ( ! pi.supported() ) {
-            cout << " not supported" << endl;
-            return;
-        }
-
-        cout << "vsize: " << pi.getVirtualMemorySize() << " resident: " << pi.getResidentSize() << endl;
-    }
 }

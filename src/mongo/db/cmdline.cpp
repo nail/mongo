@@ -19,6 +19,8 @@
 
 #include "mongo/pch.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "mongo/db/cmdline.h"
 
 #include "mongo/base/status.h"

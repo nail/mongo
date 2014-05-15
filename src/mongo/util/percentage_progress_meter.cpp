@@ -15,11 +15,13 @@
  *    limitations under the License.
  */
 
-#include "mongo/util/percentage_progress_meter.h"
 
 #include "mongo/pch.h"
 
+#include <iomanip>
+
 #include "mongo/util/log.h"
+#include "mongo/util/percentage_progress_meter.h"
 
 namespace mongo {
 

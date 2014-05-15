@@ -17,9 +17,11 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/platform/cstdint.h"
+#include "mongo/platform/strtoll.h"
 #include "mongo/util/base64.h"
 #include "mongo/util/hex.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/time_support.h"
 
 namespace mongo {
 
@@ -44,7 +46,10 @@ namespace mongo {
         STRINGVAL_RESERVE_SIZE = 4096,
         BINDATA_RESERVE_SIZE = 4096,
         BINDATATYPE_RESERVE_SIZE = 4096,
-        NS_RESERVE_SIZE = 64
+        NS_RESERVE_SIZE = 64,
+        DB_RESERVE_SIZE = 64,
+        NUMBERLONG_RESERVE_SIZE = 64,
+        DATE_RESERVE_SIZE = 64
     };
 
     static const char* LBRACE = "{",
@@ -67,6 +72,8 @@ namespace mongo {
         ossmsg << msg;
         ossmsg << ": offset:";
         ossmsg << offset();
+        ossmsg << " of:";
+        ossmsg << _buf;
         return Status(ErrorCodes::FailedToParse, ossmsg.str());
     }
 
