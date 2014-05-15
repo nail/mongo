@@ -17,6 +17,9 @@
 */
 
 #include "pch.h"
+
+#include <iomanip>
+
 #include "snapshots.h"
 #include "../client.h"
 #include "../clientcursor.h"

@@ -18,6 +18,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/base/init.h"
+#include "mongo/platform/process_id.h"
 #include "mongo/util/processinfo.h"
 
 #include <iostream>

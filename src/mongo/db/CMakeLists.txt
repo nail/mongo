@@ -222,7 +222,6 @@ add_dependencies(mongodandmongos generate_error_codes generate_action_types inst
 
 add_library(coreserver STATIC
   client_basic
-  common
   ../util/net/miniwebserver
   stats/counters
   stats/service_stats
