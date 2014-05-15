@@ -19,6 +19,8 @@
 
 #include "mongo/pch.h"
 
+#include <deque>
+
 #include "mongo/util/intrusive_counter.h"
 #include "mongo/util/timer.h"
 

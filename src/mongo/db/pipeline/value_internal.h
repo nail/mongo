@@ -21,8 +21,8 @@
 #include "bson/bsontypes.h"
 #include "bson/bsonmisc.h"
 #include "bson/oid.h"
+#include "bson/optime.h"
 #include "util/intrusive_counter.h"
-#include "util/optime.h"
 
 
 namespace mongo {
