@@ -143,60 +143,6 @@ namespace mongo {
         return true;
     }
 
-    void forkServerOrDie() {
-        if (!forkServer())
-            _exit(EXIT_FAILURE);
-    }
-
-    MONGO_INITIALIZER_GENERAL(ServerLogRedirection,
-                              ("GlobalLogManager", "completedStartupConfig"),
-                              ("default"))(
-            InitializerContext*) {
-
-        using logger::LogManager;
-        using logger::MessageEventEphemeral;
-        using logger::MessageEventDetailsEncoder;
-        using logger::MessageEventWithContextEncoder;
-        using logger::MessageLogDomain;
-        using logger::RotatableFileAppender;
-        using logger::StatusWithRotatableFileWriter;
-
-#ifndef _WIN32
-        using logger::SyslogAppender;
-
-        if (cmdLine.logWithSyslog) {
-            StringBuilder sb;
-            sb << cmdLine.binaryName << "." << cmdLine.port;
-            Logstream::useSyslog( sb.str().c_str() );
-        }
-#endif
-        if (!cmdLine.logpath.empty() && !isMongodShutdownSpecialCase) {
-            fassert(16448, !cmdLine.logWithSyslog);
-            string absoluteLogpath = boost::filesystem::absolute(
-                    cmdLine.logpath, cmdLine.cwd).string();
-            if (!initLogging(absoluteLogpath, cmdLine.logAppend)) {
-                cout << "Bad logpath value: \"" << absoluteLogpath << "\"; terminating." << endl;
-                return false;
-            }
-        }
-
-        if (!cmdLine.pidFile.empty()) {
-            writePidFile(cmdLine.pidFile);
-        }
-
-        if (!cmdLine.keyFile.empty()) {
-
-            if (!setUpSecurityKey(cmdLine.keyFile)) {
-                // error message printed in setUpPrivateKey
-                return false;
-            }
-
-            noauth = false;
-        }
-
-        return true;
-    }
-
     static void ignoreSignal( int sig ) {}
 
     void setupCoreSignals() {
