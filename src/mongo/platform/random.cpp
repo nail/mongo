@@ -22,7 +22,6 @@
 
 #ifndef _WIN32
 #include <errno.h>
-#define _CRT_RAND_S
 #endif
 
 #define _CRT_RAND_S
