@@ -20,8 +20,10 @@
 #include <ctime>
 #include <string>
 #include <boost/thread/xtime.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/version.hpp>
+
+#include "mongo/base/status_with.h"
+#include "mongo/client/export_macros.h"
 
 namespace mongo {
 
@@ -44,30 +46,59 @@ namespace mongo {
         }
     };
 
-    /**
-     * Gets the current time string (in fixed width) in UTC. Sample format:
-     *
-     * Wed Oct 31 13:34:47.996
-     *
-     * @param timeStr pointer to the buffer to set the string - should at least be
-     *     24 bytes big.
-     */
-    void curTimeString(char* timeStr);
-
     // uses ISO 8601 dates without trailing Z
     // colonsOk should be false when creating filenames
     std::string terseCurrentTime(bool colonsOk=true);
 
+    /**
+     * Formats "time" according to the ISO 8601 extended form standard, including date,
+     * and time, in the UTC timezone.
+     *
+     * Sample format: "2013-07-23T18:42:14Z"
+     */
     std::string timeToISOString(time_t time);
+
+    /**
+     * Formats "date" according to the ISO 8601 extended form standard, including date,
+     * and time with milliseconds decimal component, in the UTC timezone.
+     *
+     * Sample format: "2013-07-23T18:42:14.072Z"
+     */
+    std::string dateToISOStringUTC(Date_t date);
+
+    /**
+     * Formats "date" according to the ISO 8601 extended form standard, including date,
+     * and time with milliseconds decimal component, in the local timezone.
+     *
+     * Sample format: "2013-07-23T18:42:14.072-05:00"
+     */
+    std::string dateToISOStringLocal(Date_t date);
+
+    /**
+     * Formats "date" in fixed width in the local time zone.
+     *
+     * Sample format: "Wed Oct 31 13:34:47.996"
+     */
+    std::string dateToCtimeString(Date_t date);
+
+    /**
+     * Parses a Date_t from an ISO 8601 string representation.
+     *
+     * Sample formats: "2013-07-23T18:42:14.072-05:00"
+     *                 "2013-07-23T18:42:14.072Z"
+     *
+     * Local times are currently not supported.
+     */
+    StatusWith<Date_t> dateFromISOString(const StringData& dateString);
 
     boost::gregorian::date currentDate();
 
     // parses time of day in "hh:mm" format assuming 'hh' is 00-23
     bool toPointInTime( const std::string& str , boost::posix_time::ptime* timeOfDay );
 
-    void sleepsecs(int s);
-    void sleepmillis(long long ms);
-    void sleepmicros(long long micros);
+    MONGO_CLIENT_API void sleepsecs(int s);
+    MONGO_CLIENT_API void sleepmillis(long long ms);
+    MONGO_CLIENT_API void sleepmicros(long long micros);
 
     class Backoff {
     public:
@@ -80,6 +111,12 @@ namespace mongo {
         {}
 
         void nextSleepMillis();
+
+        /**
+         * testing-only function. used in dbtests/basictests.cpp
+         */
+        int getNextSleepMillis(int lastSleepMillis, unsigned long long currTimeMillis,
+                               unsigned long long lastErrorTimeMillis) const;
 
     private:
 
@@ -119,3 +156,5 @@ namespace mongo {
 #endif
 
 }  // namespace mongo
+
+

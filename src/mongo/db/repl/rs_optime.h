@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "../../util/optime.h"
+#include "mongo/bson/optime.h"
 
 namespace mongo {
 

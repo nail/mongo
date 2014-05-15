@@ -29,6 +29,7 @@
 
 #include "mongo/bson/bson_validate.h"
 #include "mongo/bson/oid.h"
+#include "mongo/bson/optime.h"
 #include "mongo/bson/util/atomic_int.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/json.h"
@@ -37,7 +38,6 @@
 #include "mongo/util/embedded_builder.h"
 #include "mongo/util/md5.hpp"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/optime.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/stringutils.h"
 

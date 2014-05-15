@@ -29,7 +29,7 @@
 #pragma once
 
 #include "mongo/base/counter.h"
-#include "mongo/util/optime.h"
+#include "mongo/bson/optime.h"
 #include "mongo/db/oplog.h"
 #include "mongo/util/concurrency/thread_pool.h"
 #include "mongo/db/oplogreader.h"
