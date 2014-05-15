@@ -23,6 +23,7 @@
 #include "mongo/util/debug_util.h"
 #include "mongo/util/log.h"
 #include "mongo/util/startup_test.h"
+#include "mongo/platform/cstdint.h"
 
 namespace mongo {
 

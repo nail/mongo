@@ -9,6 +9,7 @@ add_library(foundation STATIC
   debug_util
   exception_filter_win32
   file
+  hex
   log
   platform_init
   signal_handlers
