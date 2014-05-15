@@ -1,7 +1,6 @@
 /* builder.h */
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -57,8 +56,6 @@ namespace mongo {
     const int BSONObjMaxInternalSize = BSONObjMaxUserSize + ( 16 * 1024 );
 
     const int BufferMaxSize = 64 * 1024 * 1024;
-
-    void msgasserted(int msgid, const char *msg);
 
     template <typename Allocator>
     class StringBuilderImpl;
@@ -322,7 +319,8 @@ namespace mongo {
         void reset( int maxSize = 0 ) { _buf.reset( maxSize ); }
 
         std::string str() const { return std::string(_buf.data, _buf.l); }
-        
+
+        /** size of current string */
         int len() const { return _buf.l; }
 
     private:

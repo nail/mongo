@@ -397,7 +397,7 @@ namespace mongo {
             return appendCode(fieldName, code.code);
         }
 
-        /** Append a string element. 
+        /** Append a string element.
             @param sz size includes terminating null character */
         BSONObjBuilder& append(const StringData& fieldName, const char *str, int sz) {
             _b.appendNum((char) String);
@@ -974,4 +974,5 @@ namespace mongo {
     { return BSON( "$or" << BSON_ARRAY(a << b << c << d << e) ); }
     inline BSONObj OR(const BSONObj& a, const BSONObj& b, const BSONObj& c, const BSONObj& d, const BSONObj& e, const BSONObj& f)
     { return BSON( "$or" << BSON_ARRAY(a << b << c << d << e << f) ); }
+
 }

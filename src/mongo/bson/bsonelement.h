@@ -1,7 +1,7 @@
 // bsonelement.h
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (c) Tokutek Inc.
+ *    Copyright 2014 (c) Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -83,8 +83,8 @@ namespace mongo {
         void OK()                   const { chk(ok()); }     // throw MsgAssertionException if element DNE
 
         /** @return the embedded object associated with this field.
-            Note the returned object is a reference to within the parent bson object. If that 
-            object is out of scope, this pointer will no longer be valid. Call getOwned() on the 
+            Note the returned object is a reference to within the parent bson object. If that
+            object is out of scope, this pointer will no longer be valid. Call getOwned() on the
             returned BSONObj if you need your own copy.
             throws UserException if the element is not of type object.
         */
@@ -241,7 +241,7 @@ namespace mongo {
         }
 
         /** Size (length) of a string element.
-            You must assure of type String first.  
+            You must assure of type String first.
             @return string size including terminating null
         */
         int valuestrsize() const {
@@ -384,9 +384,6 @@ namespace mongo {
         /** Constructs an empty element */
         BSONElement();
 
-        /** Check that data is internally consistent. */
-        void validate() const;
-
         /** True if this element may contain subobjects. */
         bool mayEncapsulate() const {
             switch ( type() ) {
@@ -416,6 +413,10 @@ namespace mongo {
         }
         unsigned int timestampInc() const {
             return ((unsigned int*)(value() ))[0];
+        }
+
+        unsigned long long timestampValue() const {
+            return reinterpret_cast<const unsigned long long*>( value() )[0];
         }
 
         const char * dbrefNS() const {
