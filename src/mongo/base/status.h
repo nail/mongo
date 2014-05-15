@@ -88,7 +88,7 @@ namespace mongo {
 
         inline ErrorCodes::Error code() const;
 
-        inline const char* codeString() const;
+        inline std::string codeString() const;
 
         inline std::string reason() const;
 
@@ -100,12 +100,10 @@ namespace mongo {
         // Below interface used for testing code only.
         //
 
-        AtomicUInt32::WordType refCount() const {
-            return _error ? _error->refs.load() : 0;
-        }
+        inline AtomicUInt32::WordType refCount() const;
 
     private:
-        Status();
+        inline Status();
 
         struct ErrorInfo {
             AtomicUInt32 refs;             // reference counter
