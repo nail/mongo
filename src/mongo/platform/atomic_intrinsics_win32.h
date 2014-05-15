@@ -23,6 +23,9 @@
 
 #include "mongo/platform/windows_basic.h"
 
+#include <intrin.h>
+#pragma intrinsic(_InterlockedCompareExchange64)
+
 namespace mongo {
 
     /**
