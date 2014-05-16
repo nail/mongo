@@ -151,6 +151,21 @@ namespace mongo {
             }
         }
 #endif  // !defined(_WIN32)
+
+        if (!cmdLine.pidFile.empty()) {
+            writePidFile(cmdLine.pidFile);
+        }
+
+        if (!cmdLine.keyFile.empty()) {
+
+            if (!setUpSecurityKey(cmdLine.keyFile)) {
+                // error message printed in setUpPrivateKey
+                return false;
+            }
+
+            noauth = false;
+        }
+
         return true;
     }
 
