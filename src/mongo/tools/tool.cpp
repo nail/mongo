@@ -25,10 +25,9 @@
 
 #include "pcrecpp.h"
 
+#include "mongo/bson/bson_validate.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/sasl_client_authenticate.h"
-//#include "mongo/db/auth/authorization_manager.h"
-//#include "mongo/db/auth/authz_manager_external_state_mock.h"
 #include "mongo/db/json.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/txn_complete_hooks.h"
@@ -219,10 +218,6 @@ namespace mongo {
 
         }
         else {
-            if ( _params.count( "directoryperdb" ) ) {
-                unimplemented("directoryperdb");
-                //directoryperdb = true;
-            }
             verify( lastError.get( true ) );
 
             Client::initThread("tools");
@@ -484,7 +479,7 @@ namespace mongo {
         posix_fadvise(fileno(file), 0, fileLength, POSIX_FADV_SEQUENTIAL);
 #endif
 
-        if (!_quiet && logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
             (_usesstdout ? cout : cerr ) << "\t file size: " << fileLength << endl;
         }
 
@@ -513,18 +508,18 @@ namespace mongo {
             if (bsonToolGlobalParams.objcheck) {
                 const Status status = validateBSON(buf, size);
                 if (!status.isOK()) {
-                    toolError() << "INVALID OBJECT - going to try and print out " << std::endl;
-                    toolError() << "size: " << size << std::endl;
-                    toolError() << "error: " << status.reason() << std::endl;
+                    cerr << "INVALID OBJECT - going to try and print out " << std::endl;
+                    cerr << "size: " << size << std::endl;
+                    cerr << "error: " << status.reason() << std::endl;
 
                     StringBuilder sb;
                     try {
                         o.toString(sb); // using StringBuilder version to get as much as possible
                     } catch (...) {
-                        toolError() << "object up to error: " << sb.str() << endl;
+                        cerr << "object up to error: " << sb.str() << endl;
                         throw;
                     }
-                    toolError() << "complete object: " << sb.str() << endl;
+                    cerr << "complete object: " << sb.str() << endl;
 
                     // NOTE: continuing with object even though we know it is invalid.
                 }

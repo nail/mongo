@@ -33,6 +33,7 @@
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
+#include "mongo/bson/bson_validate.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/remote_transaction.h"
@@ -218,33 +219,17 @@ namespace mongo {
                     mayInterrupt( _mayBeInterrupted );
                 }
 
-                if ( isindex == false && collection == NULL ) {
-                    collection = context.db()->getCollection( to_collection );
-                    if ( !collection ) {
-                        massert( 17321,
-                                 str::stream()
-                                 << "collection dropped during clone ["
-                                 << to_collection << "]",
-                                 !createdCollection );
-                        createdCollection = true;
-                        collection = context.db()->createCollection( to_collection );
-                        verify( collection );
-                    }
-                }
-
-                BSONObj tmp = i.nextSafe();
+                BSONObj js = i.nextSafe();
+                ++n;
 
                 /* assure object is valid.  note this will slow us down a little. */
-                const Status status = validateBSON(tmp.objdata(), tmp.objsize());
+                const Status status = validateBSON(js.objdata(), js.objsize());
                 if (!status.isOK()) {
                     out() << "Cloner: skipping corrupt object from " << from_collection
                           << ": " << status.reason();
                     continue;
->>>>>>> ab48b39... SERVER-11903 Remove BSONElement::validate()
                 }
 
-                BSONObj js = i.nextSafe();
-                ++n;
 
                 if (isindex) {
                     verify(nsToCollectionSubstring(from_collection) == "system.indexes");
