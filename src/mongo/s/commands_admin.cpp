@@ -628,7 +628,7 @@ namespace mongo {
                     bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
                     if (!collectionExists && !onlyId && !onlyHashed && !careAboutUnique) {
                         BSONObjBuilder cmd;
-                        cmd.append("create", NamespaceString(ns).coll);
+                        cmd.append("create", NamespaceString(ns).coll());
                         BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
                         pk.appendElements(proposedKey);
                         bool containsId = false;
@@ -768,8 +768,7 @@ namespace mongo {
                             continue;
 
                         BSONObj moveResult;
-                        if (!chunk->moveAndCommit(to, Chunk::MaxChunkSize,
-                                false, true, moveResult)) {
+                        if ( ! chunk->moveAndCommit( to , moveResult ) ) {
                             warning().stream()
                                       << "Couldn't move chunk " << chunk << " to shard "  << to
                                       << " while sharding collection " << ns << ". Reason: "

@@ -20,7 +20,9 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/auth_external_state_s.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/matcher.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/grid.h"
