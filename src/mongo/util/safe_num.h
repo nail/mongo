@@ -134,6 +134,28 @@ namespace mutablebson {
 
 
         //
+        // logical operation support. Note that these operations are only supported for
+        // integral types. Attempts to apply with either side holding a double value
+        // will result in an EOO typed safenum.
+        //
+
+        // Bitwise 'and' support
+        SafeNum bitAnd(const SafeNum& rhs) const;
+        SafeNum operator&(const SafeNum& rhs) const;
+        SafeNum& operator&=(const SafeNum& rhs);
+
+        // Bitwise 'or' support
+        SafeNum bitOr(const SafeNum& rhs) const;
+        SafeNum operator|(const SafeNum& rhs) const;
+        SafeNum& operator|=(const SafeNum& rhs);
+
+        // Bitwise 'xor' support
+        SafeNum bitXor(const SafeNum& rhs) const;
+        SafeNum operator^(const SafeNum& rhs) const;
+        SafeNum& operator^=(const SafeNum& rhs);
+
+
+        //
         // output support
         //
 
@@ -175,6 +197,21 @@ namespace mutablebson {
          * an EOO-type instance.
          */
         static SafeNum addInternal(const SafeNum& lhs, const SafeNum& rhs);
+
+        /** Returns the bitwise 'and' of lhs and rhs, taking into consideration their types. If
+         *  the operation is invalid for the underlying types, returns an EOO instance.
+         */
+        static SafeNum andInternal(const SafeNum& lhs, const SafeNum& rhs);
+
+        /** Returns the bitwise 'or' of lhs and rhs, taking into consideration their types. If
+         *  the operation is invalid for the underlying types, returns an EOO instance.
+         */
+        static SafeNum orInternal(const SafeNum& lhs, const SafeNum& rhs);
+
+        /** Returns the bitwise 'xor' of lhs and rhs, taking into consideration their types. If
+         *  the operation is invalid for the underlying types, returns an EOO instance.
+         */
+        static SafeNum xorInternal(const SafeNum& lhs, const SafeNum& rhs);
 
         /**
          * Returns the product of 'lhs' and 'rhs', taking into consideration their types. The

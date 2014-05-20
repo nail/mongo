@@ -38,8 +38,9 @@
 #include "mongo/db/collection.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/ops/update_lifecycle_impl.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/relock.h"
+#include "mongo/db/query/get_runner.h"
 
 namespace mongo {
 
@@ -154,7 +155,27 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            const bool found = Collection::findOne(ns, queryOriginal, doc);
+            bool found = false;
+            {
+                CanonicalQuery* cq;
+                massert(17383, "Could not canonicalize " + queryOriginal.toString(),
+                        CanonicalQuery::canonicalize(ns, queryOriginal, &cq).isOK());
+
+                Runner* rawRunner;
+                massert(17384, "Could not get runner for query " + queryOriginal.toString(),
+                        getRunner(cq, &rawRunner, QueryPlannerParams::DEFAULT).isOK());
+
+                auto_ptr<Runner> runner(rawRunner);
+
+                // Set up automatic yielding
+                const ScopedRunnerRegistration safety(runner.get());
+                runner->setYieldPolicy(Runner::YIELD_AUTO);
+
+                Runner::RunnerState state;
+                if (Runner::RUNNER_ADVANCED == (state = runner->getNext(&doc, NULL))) {
+                    found = true;
+                }
+            }
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -228,18 +249,35 @@ namespace mongo {
                     if ( ! returnNew ) {
                         _appendHelper( result , doc , found , fields );
                     }
+                    
+                    const NamespaceString requestNs(ns);
+                    UpdateRequest request(requestNs);
 
-                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false );
+                    request.setQuery(queryModified);
+                    request.setUpdates(update);
+                    request.setUpsert(upsert);
+                    request.setUpdateOpLog();
+                    // TODO(greg) We need to send if we are ignoring
+                    // the shard version below, but for now no
+                    UpdateLifecycleImpl updateLifecycle(false, requestNs);
+                    request.setLifecycle(&updateLifecycle);
+                    UpdateResult res = mongo::update(request, &cc().curop()->debug());
 
+                    LOG(3) << "update result: "  << res ;
                     if ( returnNew ) {
-                        if ( res.upserted.isSet() ) {
-                            queryModified = BSON( "_id" << res.upserted );
+                        if ( !res.upserted.isEmpty() ) {
+                            BSONElement upsertedElem = res.upserted[kUpsertedFieldName];
+                            LOG(3) << "using new _id to get new doc: "
+                                   << upsertedElem;
+                            queryModified = upsertedElem.wrap("_id");
                         }
                         else if ( queryModified["_id"].type() ) {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        if (!Collection::findOne(ns, queryModified, doc)) {
+
+                        LOG(3) << "using modified query to return the new doc: " << queryModified;
+                        if ( ! Helpers::findOne( ns.c_str() , queryModified , doc ) ) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 
                                                    << " queryModified: " << queryModified 
@@ -252,9 +290,10 @@ namespace mongo {
 
                     BSONObjBuilder le( result.subobjStart( "lastErrorObject" ) );
                     le.appendBool( "updatedExisting" , res.existing );
-                    le.appendNumber( "n" , res.num );
-                    if ( res.upserted.isSet() )
-                        le.append( "upserted" , res.upserted );
+                    le.appendNumber( "n" , res.numMatched );
+                    if ( !res.upserted.isEmpty() ) {
+                        le.append( res.upserted[kUpsertedFieldName] );
+                    }
                     le.done();
                 }
             }
@@ -323,11 +362,14 @@ namespace mongo {
                 }
 
                 if (cmdObj["new"].trueValue()) {
-                    BSONElement _id = gle["upserted"];
-                    if (_id.eoo())
-                        _id = origQuery["_id"];
+                    BSONObjBuilder bob;
+                    BSONElement _id = gle[kUpsertedFieldName];
+                    if (!_id.eoo())
+                        bob.appendAs(_id, "_id");
+                    else
+                        bob.appendAs(origQuery["_id"], "_id");
 
-                    out = db.findOne(ns, QUERY("_id" << _id), fields);
+                    out = db.findOne(ns, bob.done(), fields);
                 }
 
             }

@@ -513,8 +513,6 @@ def runTest(test, testnum):
         # Blech.
         if os.path.basename(path) in ["test", "test.exe", "perftest", "perftest.exe"]:
             argv = [path]
-            if os.path.basename(path) in ["test", "test.exe"]:
-                is_test_binary = True
         # more blech
         elif os.path.basename(path) in ['mongos', 'mongos.exe']:
             argv = [path, "--test"]

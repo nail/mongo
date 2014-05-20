@@ -70,10 +70,16 @@
 #include "mongo/db/relock.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
-#include "mongo/db/ops/delete.h"
-#include "mongo/db/ops/query.h"
-#include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete_executor.h"
+#include "mongo/db/ops/delete_request.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/ops/update_lifecycle_impl.h"
+#include "mongo/db/ops/update_driver.h"
+#include "mongo/db/ops/update_executor.h"
+#include "mongo/db/ops/update_request.h"
+#include "mongo/db/pagefault.h"
+#include "mongo/db/repl/is_master.h"
+#include "mongo/db/repl/oplog.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/env.h"
@@ -543,32 +549,43 @@ namespace mongo {
         op.debug().updateobj = updateobj;
         op.setQuery(query);
 
-        const bool upsert = flags & UpdateOption_Upsert;
-        const bool multi = flags & UpdateOption_Multi;
-        const bool broadcast = flags & UpdateOption_Broadcast;
+        UpdateRequest request(ns);
 
-        Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
-        uassert(16538, status.reason(), status.isOK());
+        request.setUpsert(upsert);
+        request.setMulti(multi);
+        request.setQuery(query);
+        request.setUpdates(toupdate);
+        request.setUpdateOpLog(); // TODO: This is wasteful if repl is not active.
+        UpdateLifecycleImpl updateLifecycle(broadcast, ns);
+        request.setLifecycle(&updateLifecycle);
+        UpdateExecutor executor(&request, &op.debug());
+        uassertStatusOK(executor.prepare());
 
-        OpSettings settings;
-        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        settings.setJustOne(!multi);
-        cc().setOpSettings(settings);
+                // void ReplSetImpl::relinquish() uses big write lock so this is thus
+                // synchronized given our lock above.
+                uassert( 17010 ,  "not master", isMasterNs( ns ) );
 
-        Client::ShardedOperationScope sc;
-        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
+        // if this ever moves to outside of lock, need to adjust check
+        // Client::Context::_finishInit
+        if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
             return;
-        }
 
-        LOCK_REASON(lockReason, "update");
-        try {
-            Lock::DBRead lk(ns, lockReason);
-            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
-        }
-        catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns, lockReason);
-            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
-        }
+                const NamespaceString requestNs(ns);
+                UpdateRequest request(requestNs);
+
+                request.setUpsert(upsert);
+                request.setMulti(multi);
+                request.setQuery(query);
+                request.setUpdates(toupdate);
+                request.setUpdateOpLog(); // TODO: This is wasteful if repl is not active.
+                UpdateLifecycleImpl updateLifecycle(broadcast, requestNs);
+                request.setLifecycle(&updateLifecycle);
+                UpdateResult res = update(request, &op.debug(), &driver);
+
+        UpdateResult res = executor.execute();
+
+        // for getlasterror
+        lastError.getSafe()->recordUpdate( res.existing , res.numMatched , res.upserted );
     }
 
     void receivedDelete(Message& m, CurOp& op) {
@@ -586,17 +603,32 @@ namespace mongo {
         op.debug().query = pattern;
         op.setQuery(pattern);
 
-        const bool justOne = flags & RemoveOption_JustOne;
-        const bool broadcast = flags & RemoveOption_Broadcast;
+        PageFaultRetryableSection s;
+        while ( 1 ) {
+            try {
+                DeleteRequest request(ns);
+                request.setQuery(pattern);
+                request.setMulti(!justOne);
+                request.setUpdateOpLog(true);
+                DeleteExecutor executor(&request);
+                uassertStatusOK(executor.prepare());
+                Lock::DBWrite lk(ns.ns());
 
-        OpSettings settings;
-        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        settings.setJustOne(justOne);
-        cc().setOpSettings(settings);
+                // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
+                if ( ! broadcast && handlePossibleShardedMessage( m , 0 ) )
+                    return;
 
-        Client::ShardedOperationScope sc;
-        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
-            return;
+                Client::Context ctx(ns);
+
+                long long n = executor.execute();
+                lastError.getSafe()->recordDelete( n );
+                op.debug().ndeleted = n;
+                break;
+            }
+            catch ( PageFaultException& e ) {
+                LOG(2) << "recordDelete got a PageFaultException" << endl;
+                e.touch();
+            }
         }
 
         LOCK_REASON(lockReason, "delete");
@@ -753,26 +785,16 @@ namespace mongo {
         };
 
         if (ex) {
-            exhaust = false;
-
             BSONObjBuilder err;
             ex->getInfo().append( err );
             BSONObj errObj = err.done();
 
-            if (!ex->interrupted()) {
-                log() << errObj << endl;
-            }
-
             curop.debug().exceptionInfo = ex->getInfo();
 
-            if (ex->getCode() == 13436) {
-                replyToQuery(ResultFlag_ErrSet, m, dbresponse, errObj);
-                curop.debug().responseLength = dbresponse.response->header()->dataLen();
-                curop.debug().nreturned = 1;
-                return ok;
-            }
-
-            msgdata = emptyMoreResult(cursorid);
+            replyToQuery(ResultFlag_ErrSet, m, dbresponse, errObj);
+            curop.debug().responseLength = dbresponse.response->header()->dataLen();
+            curop.debug().nreturned = 1;
+            return ok;
         }
 
         Message *resp = new Message();
@@ -791,47 +813,18 @@ namespace mongo {
         return ok;
     }
 
-    // for failure injection around hot indexing
-    MONGO_FP_DECLARE(hotIndexUnlockedBeforeBuild);
-    // a fail point that acts like a condition variable
-    MONGO_FP_DECLARE(hotIndexSleepCond);
+    void checkAndInsert(const char *ns, /*modifies*/BSONObj& js) {
+        uassert( 10059 , "object to insert too large", js.objsize() <= BSONObjMaxUserSize);
 
-    static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
-        // We intend to take the DBWrite lock only to initiate and finalize the
-        // index build. Since we'll be releasing lock in between these steps, we
-        // take the operation lock here to ensure that we do not step down as primary.
-        RWLockRecursive::Shared oplock(operationLock);
-        uassert(16902, "not master", isMasterNs(ns));
-
-        uassert(16905, "Can only build one index at a time.", objs.size() == 1);
-
-        DEV {
-            // System.indexes cannot be sharded.
-            Client::ShardedOperationScope sc;
-            verify(!sc.handlePossibleShardedMessage(m, 0));
+        NamespaceString nsString(ns);
+        bool ok = nsString.isConfigDB() || nsString.isSystem() || js.okForStorageAsRoot();
+        if (!ok) {
+            LOG(1) << "ns: " << ns << ", not okForStorageAsRoot: " << js;
         }
-
-        LOCK_REASON(lockReasonBegin, "initializing hot index build");
-        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReasonBegin));
-
-        const BSONObj &info = objs[0];
-        const StringData &coll = info["ns"].Stringdata();
-
-        Client::Transaction transaction(DB_SERIALIZABLE);
-        shared_ptr<CollectionIndexer> indexer;
-
-        // Prepare the index build. Performs index validation and marks
-        // the collection as having an index build in progress.
-        {
-            Client::Context ctx(ns);
-            Collection *cl = getOrCreateCollection(coll, true);
-            if (cl->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
-                // No error or action if the index already exists. We need to commit
-                // the transaction in case this is an ensure index on the _id field
-                // and the ns was created by getOrCreateCollection()
-                transaction.commit();
-                return;
-            }
+        uassert(17013,
+                "Cannot insert object with _id field of array/regex or "
+                "with any field name prefixed with $ or containing a dot. ",
+                ok);
 
             _insertObjects(ns, objs, false, 0, true);
             indexer = cl->newHotIndexer(info);
@@ -1115,11 +1108,7 @@ namespace mongo {
         }
         string errmsg;
         int errCode;
-
-        LOCK_REASON(lockReason, "count");
-        Client::ReadContext ctx(ns, lockReason);
-        Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
+        long long res = runCount( ns, _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
         if ( res == -1 ) {
             // namespace doesn't exist
             return 0;
@@ -1310,6 +1299,80 @@ namespace mongo {
             uassert( 10310 ,  "Unable to lock file: " + name + ". Is a mongod instance already running?",  0 );
         }
 #endif
+
+        if ( oldFile ) {
+            // we check this here because we want to see if we can get the lock
+            // if we can't, then its probably just another mongod running
+            
+            string errmsg;
+            if (doingRepair && dur::haveJournalFiles()) {
+                errmsg = "************** \n"
+                         "You specified --repair but there are dirty journal files. Please\n"
+                         "restart without --repair to allow the journal files to be replayed.\n"
+                         "If you wish to repair all databases, please shutdown cleanly and\n"
+                         "run with --repair again.\n"
+                         "**************";
+            }
+            else if (storageGlobalParams.dur) {
+                if (!dur::haveJournalFiles(/*anyFiles=*/true)) {
+                    // Passing anyFiles=true as we are trying to protect against starting in an
+                    // unclean state with the journal directory unmounted. If there are any files,
+                    // even prealloc files, then it means that it is mounted so we can continue.
+                    // Previously there was an issue (SERVER-5056) where we would fail to start up
+                    // if killed during prealloc.
+                    
+                    vector<string> dbnames;
+                    getDatabaseNames( dbnames );
+                    
+                    if ( dbnames.size() == 0 ) {
+                        // this means that mongod crashed
+                        // between initial startup and when journaling was initialized
+                        // it is safe to continue
+                    }
+                    else {
+                        errmsg = str::stream()
+                            << "************** \n"
+                            << "old lock file: " << name << ".  probably means unclean shutdown,\n"
+                            << "but there are no journal files to recover.\n"
+                            << "this is likely human error or filesystem corruption.\n"
+                            << "please make sure that your journal directory is mounted.\n"
+                            << "found " << dbnames.size() << " dbs.\n"
+                            << "see: http://dochub.mongodb.org/core/repair for more information\n"
+                            << "*************";
+                    }
+
+                }
+            }
+            else {
+                if (!dur::haveJournalFiles() && !doingRepair) {
+                    errmsg = str::stream()
+                             << "************** \n"
+                             << "Unclean shutdown detected.\n"
+                             << "Please visit http://dochub.mongodb.org/core/repair for recovery instructions.\n"
+                             << "*************";
+                }
+            }
+
+            if (!errmsg.empty()) {
+                cout << errmsg << endl;
+#ifdef _WIN32
+                CloseHandle( lockFileHandle );
+#else
+                close ( lockFile );
+#endif
+                lockFile = 0;
+                uassert( 12596 , "old lock file" , 0 );
+            }
+        }
+
+        // Not related to lock file, but this is where we handle unclean shutdown
+        if (!storageGlobalParams.dur && dur::haveJournalFiles()) {
+            cout << "**************" << endl;
+            cout << "Error: journal files are present in journal directory, yet starting without journaling enabled." << endl;
+            cout << "It is recommended that you start with journaling enabled so that recovery may occur." << endl;
+            cout << "**************" << endl;
+            uasserted(13597, "can't start without --journal enabled when journal/ files are present");
+        }
 
 #ifdef _WIN32
         uassert( 13625, "Unable to truncate lock file", _chsize(lockFile, 0) == 0);

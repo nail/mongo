@@ -30,16 +30,14 @@ namespace {
     using std::string;
 
     TEST(Empty, NoFields) {
-        FieldRef fieldRef;
-        fieldRef.parse("");
+        FieldRef fieldRef("");
         ASSERT_EQUALS(fieldRef.numParts(), 0U);
         ASSERT_EQUALS(fieldRef.dottedField(), "");
     }
 
     TEST(Empty, NoFieldNames) {
         string field = ".";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 2U);
         ASSERT_EQUALS(fieldRef.getPart(0), "");
         ASSERT_EQUALS(fieldRef.getPart(1), "");
@@ -59,8 +57,7 @@ namespace {
 
     TEST(Empty, EmptyFieldName) {
         string field = ".b.";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 3U);
         ASSERT_EQUALS(fieldRef.getPart(0), "");
         ASSERT_EQUALS(fieldRef.getPart(1), "b");
@@ -70,8 +67,7 @@ namespace {
 
     TEST(Normal, SinglePart) {
         string field = "a";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 1U);
         ASSERT_EQUALS(fieldRef.getPart(0), field);
         ASSERT_EQUALS(fieldRef.dottedField(), field);
@@ -97,8 +93,7 @@ namespace {
             field.append(parts[i]);
         }
 
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), size);
         for (size_t i=0; i<size; i++) {
             ASSERT_EQUALS(fieldRef.getPart(i), parts[i]);
@@ -108,8 +103,7 @@ namespace {
 
     TEST(Replacement, SingleField) {
         string field = "$";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 1U);
         ASSERT_EQUALS(fieldRef.getPart(0), "$");
 
@@ -122,8 +116,7 @@ namespace {
 
     TEST(Replacement, InMultipleField) {
         string field = "a.b.c.$.e";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 5U);
         ASSERT_EQUALS(fieldRef.getPart(3), "$");
 
@@ -137,8 +130,7 @@ namespace {
     TEST(Replacement, SameFieldMultipleReplacements) {
         string prefix = "a.";
         string field = prefix + "$";
-        FieldRef fieldRef;
-        fieldRef.parse(field);
+        FieldRef fieldRef(field);
         ASSERT_EQUALS(fieldRef.numParts(), 2U);
 
         const char* parts[] = {"a", "b", "c", "d", "e"};

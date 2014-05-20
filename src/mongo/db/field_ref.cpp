@@ -35,8 +35,14 @@
 
 namespace mongo {
 
-    void FieldRef::parse(const StringData& dottedField) {
-        if (dottedField.size() == 0) {
+    FieldRef::FieldRef() : _size(0) {}
+
+    FieldRef::FieldRef(const StringData& path) : _size(0) {
+        parse(path);
+    }
+
+    void FieldRef::parse(const StringData& path) {
+        if (path.size() == 0) {
             return;
         }
 

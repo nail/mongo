@@ -29,42 +29,44 @@
  *    it in the license file.
  */
 
-#include "mongo/pch.h"
+#pragma once
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/ops/update_request.h"
+#include "mongo/db/ops/update_result.h"
+#include "mongo/db/query_plan_selection_policy.h"
 
 namespace mongo {
 
-    class Collection;
+    class UpdateDriver;
 
-    struct UpdateResult {
-        const bool existing; // if existing objects were modified
-        const bool mod;      // was this a $ mod
-        const long long num; // how many objects touched
-        OID upserted;        // if something was upserted, the new _id of the object
+    /**
+     * Utility method to execute an update described by "request".
+     *
+     * Caller must hold the appropriate database locks.
+     */
+    UpdateResult update(const UpdateRequest& request, OpDebug* opDebug);
 
-        UpdateResult(const bool e, const bool m,
-                     const unsigned long long n, const BSONObj &upsertedObj) :
-            existing(e), mod(m), num(n) {
-            upserted.clear();
-            const BSONElement id = upsertedObj["_id"];
-            if (!e && n == 1 && id.type() == jstOID) {
-                upserted = id.OID();
-            }
-        }
-    };
+    /**
+     * Execute the update described by "request", using the given already-parsed
+     * driver and canonical query.
+     *
+     * NOTE: This function is really a utility method for UpdateExecutor.
+     *
+     * TODO: Move this into a private method of UpdateExecutor.
+     */
+    UpdateResult update(const UpdateRequest& request,
+                        OpDebug* opDebug,
+                        UpdateDriver* driver,
+                        CanonicalQuery* cq);
 
-    BSONObj invertUpdateMods(const BSONObj &updateobj);
-
-    void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, BSONObj &newObj, 
-                         const BSONObj &updateobj,
-                         const bool fromMigrate,
-                         uint64_t flags);
-
-    UpdateResult updateObjects(const char *ns,
-                               const BSONObj &updateobj, const BSONObj &pattern,
-                               const bool upsert, const bool multi,
-                               const bool fromMigrate = false);
-
+    /**
+     * takes the from document and returns a new document
+     * after apply all the operators
+     * e.g.
+     *   applyUpdateOperators( BSON( "x" << 1 ) , BSON( "$inc" << BSON( "x" << 1 ) ) );
+     *   returns: { x : 2 }
+     */
+    BSONObj applyUpdateOperators( const BSONObj& from, const BSONObj& operators );
 }  // namespace mongo

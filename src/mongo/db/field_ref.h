@@ -51,7 +51,9 @@ namespace mongo {
     class FieldRef {
         MONGO_DISALLOW_COPYING(FieldRef);
     public:
-        FieldRef() : _size(0) {}
+        FieldRef();
+
+        explicit FieldRef(const StringData& path);
 
         /**
          * Field parts accessed through getPart() calls no longer would be valid, after the

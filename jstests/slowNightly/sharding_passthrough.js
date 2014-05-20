@@ -40,6 +40,7 @@ files.forEach(function(x) {
     // fsync, fsync2: isn't supported through mongos.
     // remove5: getpreverror, I think. don't run.
     // update4: getpreverror don't run.
+    // getmore_error: tests a mongod-specific failpoint
 
     // Around July 20, command passthrough went away, and these
     // commands weren't implemented:
@@ -87,7 +88,8 @@ files.forEach(function(x) {
         'shellkillop|' +
         'update4|' +
         'update_setOnInsert|' +
-        'profile\\d*' +
+        'profile\\d*|' +
+        'max_time_ms' + // Will be fixed when SERVER-2212 is resolved.
         ')\.js$');
 
 	// These aren't supposed to get run under sharding:

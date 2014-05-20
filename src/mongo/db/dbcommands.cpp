@@ -77,7 +77,8 @@
 #include "mongo/s/d_writeback.h"
 #include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
-#include "mongo/util/version.h"
+#include "mongo/server.h"
+#include "mongo/util/fail_point_service.h"
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
 
@@ -751,7 +752,7 @@ namespace mongo {
             string ns = parseNs(dbname, cmdObj);
             string err;
             int errCode;
-            long long n = runCount(ns.c_str(), cmdObj, err, errCode);
+            long long n = runCount(ns, cmdObj, err, errCode);
             long long nn = n;
             bool ok = true;
             if ( n == -1 ) {
@@ -2086,6 +2087,29 @@ namespace mongo {
             scp->checkPossiblyShardedMessage(dbQuery, cmdns);
         }
 
+        // Handle command option maxTimeMS.
+        StatusWith<int> maxTimeMS = LiteParsedQuery::parseMaxTimeMS(cmdObj["maxTimeMS"]);
+        if (!maxTimeMS.isOK()) {
+            appendCommandStatus(result, false, maxTimeMS.getStatus().reason());
+            return;
+        }
+        if (cmdObj.hasField("$maxTimeMS")) {
+            appendCommandStatus(result,
+                                false,
+                                "no such command option $maxTimeMS; use maxTimeMS instead");
+            return;
+        }
+
+        client.curop()->setMaxTimeMicros(static_cast<unsigned long long>(maxTimeMS.getValue())
+                                         * 1000);
+        try {
+            killCurrentOp.checkForInterrupt(); // May trigger maxTimeAlwaysTimeOut fail point.
+        }
+        catch (UserException& e) {
+            appendCommandStatus(result, e.toStatus());
+            return;
+        }
+
         std::string errmsg;
         bool retval = false;
         LOCK_REASON(lockReason, "command");
@@ -2198,6 +2222,16 @@ namespace mongo {
                                          : str::equals("query", e.fieldName())))
             {
                 jsobj = e.embeddedObject();
+                if (_cmdobj.hasField("$maxTimeMS")) {
+                    Command::appendCommandStatus(anObjBuilder,
+                                                 false,
+                                                 "cannot use $maxTimeMS query option with "
+                                                    "commands; use maxTimeMS command option "
+                                                    "instead");
+                    BSONObj x = anObjBuilder.done();
+                    b.appendBuf(x.objdata(), x.objsize());
+                    return true;
+                }
             }
             else {
                 jsobj = cmdobj;
@@ -2227,7 +2261,7 @@ namespace mongo {
         }
 
         BSONObj x = anObjBuilder.done();
-        b.appendBuf((void*) x.objdata(), x.objsize());
+        b.appendBuf(x.objdata(), x.objsize());
 
         return true;
     }

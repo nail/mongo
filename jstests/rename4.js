@@ -8,48 +8,48 @@ function c( f ) {
     db.resetError();
 }
 
-c( "t.update( {}, {$rename:{'a':'a'}} )" );
-c( "t.update( {}, {$rename:{'':'a'}} )" );
-c( "t.update( {}, {$rename:{'a':''}} )" );
-c( "t.update( {}, {$rename:{'_id':'a'}} )" );
-c( "t.update( {}, {$rename:{'a':'_id'}} )" );
-c( "t.update( {}, {$rename:{'_id.a':'b'}} )" );
-c( "t.update( {}, {$rename:{'b':'_id.a'}} )" );
-c( "t.update( {}, {$rename:{'_id.a':'_id.b'}} )" );
-c( "t.update( {}, {$rename:{'_id.b':'_id.a'}} )" );
-c( "t.update( {}, {$rename:{'.a':'b'}} )" );
-c( "t.update( {}, {$rename:{'a':'.b'}} )" );
-c( "t.update( {}, {$rename:{'a.':'b'}} )" );
-c( "t.update( {}, {$rename:{'a':'b.'}} )" );
-c( "t.update( {}, {$rename:{'a.b':'a'}} )" );
-c( "t.update( {}, {$rename:{'a.$':'b'}} )" );
-c( "t.update( {}, {$rename:{'a':'b.$'}} )" );
-c( "t.update( {}, {$set:{b:1},$rename:{'a':'b'}} )" );
-c( "t.update( {}, {$rename:{'a':'b'},$set:{b:1}} )" );
-c( "t.update( {}, {$rename:{'a':'b'},$set:{a:1}} )" );
-c( "t.update( {}, {$set:{'b.c':1},$rename:{'a':'b'}} )" );
-c( "t.update( {}, {$set:{b:1},$rename:{'a':'b.c'}} )" );
-c( "t.update( {}, {$rename:{'a':'b'},$set:{'b.c':1}} )" );
-c( "t.update( {}, {$rename:{'a':'b.c'},$set:{b:1}} )" );
+bad( "t.update( {}, {$rename:{'a':'a'}} )" );
+bad( "t.update( {}, {$rename:{'':'a'}} )" );
+bad( "t.update( {}, {$rename:{'a':''}} )" );
+bad( "t.update( {}, {$rename:{'.a':'b'}} )" );
+bad( "t.update( {}, {$rename:{'a':'.b'}} )" );
+bad( "t.update( {}, {$rename:{'a.':'b'}} )" );
+bad( "t.update( {}, {$rename:{'a':'b.'}} )" );
+bad( "t.update( {}, {$rename:{'a.b':'a'}} )" );
+bad( "t.update( {}, {$rename:{'a.$':'b'}} )" );
+bad( "t.update( {}, {$rename:{'a':'b.$'}} )" );
 
-t.save( {a:[1],b:{c:[1]},d:[{e:1}],f:1} );
-c( "t.update( {}, {$rename:{'a.0':'f'}} )" );
-c( "t.update( {}, {$rename:{'a.0':'g'}} )" );
-c( "t.update( {}, {$rename:{'f':'a.0'}} )" );
-c( "t.update( {}, {$rename:{'b.c.0':'f'}} )" );
-c( "t.update( {}, {$rename:{'f':'b.c.0'}} )" );
-c( "t.update( {}, {$rename:{'d.e':'d.f'}} )" );
-c( "t.update( {}, {$rename:{'d.e':'f'}} )" );
-c( "t.update( {}, {$rename:{'d.f':'d.e'}} )" );
-c( "t.update( {}, {$rename:{'f':'d.e'}} )" );
-c( "t.update( {}, {$rename:{'d.0.e':'d.f'}} )" );
-c( "t.update( {}, {$rename:{'d.0.e':'f'}} )" );
-c( "t.update( {}, {$rename:{'d.f':'d.0.e'}} )" );
-c( "t.update( {}, {$rename:{'f':'d.0.e'}} )" );
-c( "t.update( {}, {$rename:{'f.g':'a'}} )" );
-c( "t.update( {}, {$rename:{'a':'f.g'}} )" );
+// Only bad if input doc has field resulting in conflict
+t.save( {_id:1, a:2} );
+bad( "t.update( {}, {$rename:{'_id':'a'}} )" );
+bad( "t.update( {}, {$set:{b:1},$rename:{'a':'b'}} )" );
+bad( "t.update( {}, {$rename:{'a':'b'},$set:{b:1}} )" );
+bad( "t.update( {}, {$rename:{'a':'b'},$set:{a:1}} )" );
+bad( "t.update( {}, {$set:{'b.c':1},$rename:{'a':'b'}} )" );
+bad( "t.update( {}, {$set:{b:1},$rename:{'a':'b.c'}} )" );
+bad( "t.update( {}, {$rename:{'a':'b'},$set:{'b.c':1}} )" );
+bad( "t.update( {}, {$rename:{'a':'b.c'},$set:{b:1}} )" );
 
-function v( start, mod, expected ) {
+
+t.remove({});
+t.save( {a:[1],b:{c:[2]},d:[{e:3}],f:4} );
+bad( "t.update( {}, {$rename:{'a.0':'f'}} )" );
+bad( "t.update( {}, {$rename:{'a.0':'g'}} )" );
+bad( "t.update( {}, {$rename:{'f':'a.0'}} )" );
+bad( "t.update( {}, {$rename:{'b.c.0':'f'}} )" );
+bad( "t.update( {}, {$rename:{'f':'b.c.0'}} )" );
+bad( "t.update( {}, {$rename:{'d.e':'d.f'}} )" );
+bad( "t.update( {}, {$rename:{'d.e':'f'}} )" );
+bad( "t.update( {}, {$rename:{'d.f':'d.e'}} )" );
+bad( "t.update( {}, {$rename:{'f':'d.e'}} )" );
+bad( "t.update( {}, {$rename:{'d.0.e':'d.f'}} )" );
+bad( "t.update( {}, {$rename:{'d.0.e':'f'}} )" );
+bad( "t.update( {}, {$rename:{'d.f':'d.0.e'}} )" );
+bad( "t.update( {}, {$rename:{'f':'d.0.e'}} )" );
+bad( "t.update( {}, {$rename:{'f.g':'a'}} )" );
+bad( "t.update( {}, {$rename:{'a':'f.g'}} )" );
+
+function good( start, mod, expected ) {
     t.remove();
     t.save( start );
     t.update( {}, mod );
@@ -97,6 +97,14 @@ v( {a:{z:1,b:1,c:1}}, {$rename:{'a.b':'a.c'}}, {a:{c:1,z:1}} );
 v( {a:{z:1,tomato:1,potato:1}}, {$rename:{'a.tomato':'a.potato'}}, {a:{potato:1,z:1}} );
 v( {a:{z:1,b:1}}, {$rename:{'a.b':'a.cc'}}, {a:{cc:1,z:1}} );
 v( {a:{z:1,b:1,c:1}}, {$rename:{'a.b':'aa.c'}}, {a:{c:1,z:1},aa:{c:1}} );
+
+// TODO: This should be supported, and it is with the new update framework, but not with the
+// old, and we currently don't have a good way to check which mode we are in. When we do have
+// that, add this test guarded under that condition. Or, when we remove the old update path
+// just enable this test.
+
+// valid to rename away from an invalid name
+// good( {x:1}, {$rename:{'$a.b':'a.b'}}, {x:1} );
 
 // check index
 t.drop();
