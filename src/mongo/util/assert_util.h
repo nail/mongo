@@ -309,6 +309,8 @@ namespace mongo {
                   << std::endl; \
     }
 
+namespace mongo {
+
     /** ExceptionSaver can be subclassed to create an object suitable for use in a C callback.
         Use of this class allows C callbacks to throw exceptions around a C API that is not internally exception-safe.
         Typical use is something like this:
@@ -390,3 +392,4 @@ namespace mongo {
         }
     };
 
+} // namespace mongo
