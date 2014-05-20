@@ -1,7 +1,6 @@
 //engine_v8.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -1202,9 +1201,6 @@ namespace mongo {
             // install db access functions in the global object
             installDBAccess();
 
-            // add global load() helper
-            injectV8Function("load", load);
-
             // install the Mongo function object and instantiate the 'db' global
             _MongoFT = FTPtr::New(getMongoFunctionTemplate(this, true));
             injectV8Function("Mongo", MongoFT(), _global);
@@ -1429,7 +1425,7 @@ namespace mongo {
             };
 
             v8::Handle<v8::Value> ret = _jsRegExpConstructor->NewInstance(2, args);
-            uassert(16928, str::stream() << "Error converting " << elem.toString(false)
+            uassert(16863, str::stream() << "Error converting " << elem.toString(false)
                                          << " in field " << elem.fieldName()
                                          << " to a JS RegExp object: "
                                          << toSTLString(tryCatch.Exception()),
@@ -1550,9 +1546,9 @@ namespace mongo {
         const string hexStr = toSTLString(obj->Get(strLitToV8("str")));
 
         // OID parser doesn't have user-friendly error messages
-        uassert(16929, "ObjectID.str must be exactly 24 chars long",
+        uassert(16864, "ObjectID.str must be exactly 24 chars long",
                 hexStr.size() == 24);
-        uassert(16930, "ObjectID.str must only have hex characters [0-1a-fA-F]",
+        uassert(16865, "ObjectID.str must only have hex characters [0-1a-fA-F]",
                 count_if(hexStr.begin(), hexStr.end(), ::isxdigit) == 24);
 
         return OID(hexStr);

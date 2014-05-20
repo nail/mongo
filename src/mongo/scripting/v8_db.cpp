@@ -67,7 +67,7 @@ namespace mongo {
     }  // namespace
 
     void v8RegisterMongoPrototypeManipulator(const V8FunctionPrototypeManipulatorFn& manipulator) {
-        fassert(16987, !_mongoPrototypeManipulatorsFrozen);
+        fassert(16467, !_mongoPrototypeManipulatorsFrozen);
         _mongoPrototypeManipulators.push_back(manipulator);
     }
 
@@ -76,7 +76,7 @@ namespace mongo {
         v8::HandleScope handle_scope;
         const int argc = args.Length();
         static const int MAX_ARGC = 24;
-        uassert(16925, "Too many arguments. Max is 24",
+        uassert(16858, "Too many arguments. Max is 24",
                 argc <= MAX_ARGC);
 
         // TODO SERVER-8016: properly allocate handles on the stack
@@ -114,7 +114,7 @@ namespace mongo {
         scope->injectV8Method("logout", mongoLogout, proto);
         scope->injectV8Method("cursorFromId", mongoCursorFromId, proto);
 
-        fassert(16924, _mongoPrototypeManipulatorsFrozen);
+        fassert(16468, _mongoPrototypeManipulatorsFrozen);
         for (size_t i = 0; i < _mongoPrototypeManipulators.size(); ++i)
             _mongoPrototypeManipulators[i](scope, mongo);
 
@@ -133,7 +133,7 @@ namespace mongo {
         }
 
         // only allow function template to be used by a constructor
-        uassert(16926, "Mongo function is only usable as a constructor",
+        uassert(16859, "Mongo function is only usable as a constructor",
                 args.IsConstructCall());
         verify(scope->MongoFT()->HasInstance(args.This()));
 
@@ -165,7 +165,7 @@ namespace mongo {
         argumentCheck(args.Length() == 0, "local Mongo constructor takes no args")
 
         // only allow function template to be used by a constructor
-        uassert(16927, "Mongo function is only usable as a constructor",
+        uassert(16860, "Mongo function is only usable as a constructor",
                 args.IsConstructCall());
         verify(scope->MongoFT()->HasInstance(args.This()));
 
