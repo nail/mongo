@@ -25,8 +25,5 @@ if (JS_ENGINE STREQUAL v8)
     mongocommon
     stringutils
     )
-elseif (JS_ENGINE STREQUAL sm)
-  message(SEND_ERROR "spidermonkey not supported with cmake")
-else ()
   message(SEND_ERROR "unknown js engine")
 endif ()
