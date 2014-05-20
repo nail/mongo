@@ -1,5 +1,3 @@
-// delete.cpp
-
 /**
  *    Copyright (C) 2008 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.

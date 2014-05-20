@@ -32,19 +32,16 @@
 
 #include "mongo/db/collection.h"
 #include "mongo/db/client.h"
-#include "mongo/db/clientcursor.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplog_helpers.h"
-#include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/delete_request.h"
+#include "mongo/db/query/canonical_query.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/stacktrace.h"
-
 
 namespace mongo {
 
@@ -104,7 +101,7 @@ namespace mongo {
         }
 
         uassertStatusOK(prepare());
-        uassert(0,
+        uassert(17417,
                 mongoutils::str::stream() <<
                 "DeleteExecutor::prepare() failed to parse query " << _request->getQuery(),
                 _isQueryParsed);
@@ -182,4 +179,4 @@ namespace mongo {
         return nDeleted;
     }
 
-} // namespace mongo
+}  // namespace mongo
