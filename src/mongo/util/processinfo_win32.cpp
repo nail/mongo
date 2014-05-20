@@ -19,11 +19,6 @@
 
 #include <iostream>
 #include <psapi.h>
-#include <Windows.h>
-
-#include <boost/scoped_array.hpp>
-
-#include <boost/scoped_array.hpp>
 
 #include "mongo/util/processinfo.h"
 
@@ -52,8 +47,10 @@ namespace mongo {
             }
             supported = false;
         }
-    } psapiGlobal;
-                
+    };
+
+    static PsApiInit* psapiGlobal = NULL;
+
     int _wconvertmtos( SIZE_T s ) {
         return (int)( s / ( 1024 * 1024 ) );
     }
@@ -96,18 +93,6 @@ namespace mongo {
             info.append("availPageFileMB", static_cast<int>(mse.ullAvailPageFile / 1024 / 1024));
             info.append("ramMB", static_cast<int>(mse.ullTotalPhys / 1024 / 1024));
         }
-    }
-
-    static inline string LPCTSTRtostring(LPCTSTR tstr, DWORD len) {
-#ifdef UNICODE
-        boost::scoped_array<char> buf(new char[len]);
-        size_t sz = wcstombs(buf.get(), tstr, len);
-        verify(sz < (size_t)-1);
-        string s(buf.get());
-#else
-        string s(tstr, len);
-#endif
-        return s;
     }
 
     string ProcessInfo::getExePath() const {
@@ -237,6 +222,9 @@ namespace mongo {
         osVersion = verstr.str();
         hasNuma = checkNumaEnabled();
         _extraStats = bExtra.obj();
+        if (psapiGlobal == NULL) {
+            psapiGlobal = new PsApiInit();
+        }
 
     }
 
@@ -292,7 +280,7 @@ namespace mongo {
     }
 
     bool ProcessInfo::blockCheckSupported() {
-        return psapiGlobal.supported;
+        return psapiGlobal->supported;
     }
 
     bool ProcessInfo::blockInMemory(const void* start) {
@@ -312,7 +300,7 @@ namespace mongo {
 #endif
         PSAPI_WORKING_SET_EX_INFORMATION wsinfo;
         wsinfo.VirtualAddress = const_cast<void*>(start);
-        BOOL result = psapiGlobal.QueryWSEx( GetCurrentProcess(), &wsinfo, sizeof(wsinfo) );
+        BOOL result = psapiGlobal->QueryWSEx( GetCurrentProcess(), &wsinfo, sizeof(wsinfo) );
         if ( result )
             if ( wsinfo.VirtualAttributes.Valid )
                 return true;
@@ -330,7 +318,7 @@ namespace mongo {
                     reinterpret_cast<unsigned long long>(startOfFirstPage) + i * getPageSize());
         }
 
-        BOOL result = psapiGlobal.QueryWSEx(GetCurrentProcess(),
+        BOOL result = psapiGlobal->QueryWSEx(GetCurrentProcess(),
                                             wsinfo.get(),
                                             sizeof(PSAPI_WORKING_SET_EX_INFORMATION) * numPages);
 

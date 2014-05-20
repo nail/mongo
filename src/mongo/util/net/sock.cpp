@@ -1,7 +1,6 @@
 // @file sock.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -408,7 +407,8 @@ namespace mongo {
     }
 
     Socket::Socket(int fd , const SockAddr& remote) : 
-        _fd(fd), _remote(remote), _timeout(0), _logLevel(logger::LogSeverity::Log()) {
+        _fd(fd), _remote(remote), _timeout(0), _lastValidityCheckAtSecs(time(0)), 
+        _logLevel(logger::LogSeverity::Log()) {
         _init();
         if (fd >= 0) {
             _local = getLocalAddrForBoundSocketFd(_fd);

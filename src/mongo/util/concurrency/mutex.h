@@ -1,7 +1,6 @@
 // @file mutex.h
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -27,6 +26,7 @@
 #include <boost/thread/xtime.hpp>
 
 #include "mongo/util/assert_util.h"
+#include "mongo/util/heapcheck.h"
 #include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/time_support.h"
 
@@ -77,9 +77,11 @@ namespace mongo {
         mutex(const char *name) : _name(name)
         {
             _m = new boost::timed_mutex();
+            IGNORE_OBJECT( _m  );   // Turn-off heap checking on _m
         }
         ~mutex() {
             if( !StaticObserver::_destroyingStatics ) {
+                UNIGNORE_OBJECT( _m );
                 delete _m;
             }
         }

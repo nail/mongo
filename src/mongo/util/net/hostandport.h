@@ -1,7 +1,6 @@
 // hostandport.h
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -18,10 +17,10 @@
 
 #pragma once
 
-#include "mongo/db/cmdline.h"
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/server_options.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/net/sock.h"
-#include "mongo/bson/util/builder.h"
 
 namespace mongo {
 

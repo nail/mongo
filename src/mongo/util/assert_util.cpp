@@ -1,7 +1,6 @@
 // assert_util.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -105,7 +104,7 @@ namespace mongo {
 #if defined(_DEBUG) || defined(_DURABLEDEFAULTON) || defined(_DURABLEDEFAULTOFF)
         // this is so we notice in buildbot
         log() << "\n\n***aborting after wassert() failure in a debug/test build\n\n" << endl;
-        ::abort();
+        abort();
 #endif
     }
 
@@ -121,7 +120,7 @@ namespace mongo {
 #if defined(_DEBUG) || defined(_DURABLEDEFAULTON) || defined(_DURABLEDEFAULTOFF)
         // this is so we notice in buildbot
         log() << "\n\n***aborting after verify() failure as this is a debug/test build\n\n" << endl;
-        ::abort();
+        abort();
 #endif
         throw e;
     }
@@ -139,7 +138,7 @@ namespace mongo {
         logContext();
         breakpoint();
         log() << "\n\n***aborting after fassert() failure\n\n" << endl;
-        ::abort();
+        abort();
     }
 
     NOINLINE_DECL void fassertFailedNoTrace( int msgid ) {

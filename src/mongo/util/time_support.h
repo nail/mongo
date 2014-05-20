@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include <iosfwd>
 #include <ctime>
 #include <string>
 #include <boost/thread/xtime.hpp>
 #include <boost/version.hpp>
 
 #include "mongo/base/status_with.h"
+#include "mongo/client/export_macros.h"
 
 namespace mongo {
 
@@ -45,10 +45,6 @@ namespace mongo {
             return static_cast<int64_t>(millis);
         }
     };
-
-    // uses ISO 8601 dates without trailing Z
-    // colonsOk should be false when creating filenames
-    std::string terseCurrentTime(bool colonsOk=true);
 
     // uses ISO 8601 dates without trailing Z
     // colonsOk should be false when creating filenames
@@ -95,29 +91,14 @@ namespace mongo {
      */
     StatusWith<Date_t> dateFromISOString(const StringData& dateString);
 
-    /**
-     * Like dateToISOStringUTC, except outputs to a std::ostream.
-     */
-    void outputDateAsISOStringUTC(std::ostream& os, Date_t date);
-
-    /**
-     * Like dateToISOStringLocal, except outputs to a std::ostream.
-     */
-    void outputDateAsISOStringLocal(std::ostream& os, Date_t date);
-
-    /**
-     * Like dateToCtimeString, except outputs to a std::ostream.
-     */
-    void outputDateAsCtime(std::ostream& os, Date_t date);
-
     boost::gregorian::date currentDate();
 
     // parses time of day in "hh:mm" format assuming 'hh' is 00-23
     bool toPointInTime( const std::string& str , boost::posix_time::ptime* timeOfDay );
 
-    void sleepsecs(int s);
-    void sleepmillis(long long ms);
-    void sleepmicros(long long micros);
+    MONGO_CLIENT_API void sleepsecs(int s);
+    MONGO_CLIENT_API void sleepmillis(long long ms);
+    MONGO_CLIENT_API void sleepmicros(long long micros);
 
     class Backoff {
     public:

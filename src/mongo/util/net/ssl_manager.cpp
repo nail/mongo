@@ -17,9 +17,12 @@
 
 #include "mongo/util/net/ssl_manager.h"
 
-#include <vector>
-#include <string>
+#include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/tss.hpp>
+#include <string>
+#include <vector>
+
+#include "mongo/base/init.h"
 #include "mongo/bson/util/atomic_int.h"
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/mongoutils/str.h"
@@ -44,28 +47,28 @@ namespace mongo {
         return prefix + SSLeay_version(SSLEAY_VERSION) + suffix;
     }
 
-    /**
-     * Multithreaded Support for SSL.
-     *
-     * In order to allow OpenSSL to work in a multithreaded environment, you
-     * must provide some callbacks for it to use for locking.  The following code
-     * sets up a vector of mutexes and uses thread-local storage to assign an id
-     * to each thread.
-     * The so-called SSLThreadInfo class encapsulates most of the logic required for
-     * OpenSSL multithreaded support.
-     */
+    namespace {
 
-    static unsigned long _ssl_id_callback();
-    static void _ssl_locking_callback(int mode, int type, const char *file, int line);
+        /**
+         * Multithreaded Support for SSL.
+         *
+         * In order to allow OpenSSL to work in a multithreaded environment, you
+         * must provide some callbacks for it to use for locking.  The following code
+         * sets up a vector of mutexes and uses thread-local storage to assign an id
+         * to each thread.
+         * The so-called SSLThreadInfo class encapsulates most of the logic required for
+         * OpenSSL multithreaded support.
+         */
 
-    class SSLThreadInfo {
-    public:
-        
-        SSLThreadInfo() {
-            _id = ++_next;
-        }
-        
-        ~SSLThreadInfo() {}
+        unsigned long _ssl_id_callback();
+        void _ssl_locking_callback(int mode, int type, const char *file, int line);
+
+        class SSLThreadInfo {
+        public:
+
+            SSLThreadInfo() {
+                _id = ++_next;
+            }
 
             ~SSLThreadInfo() {
             }
@@ -80,12 +83,6 @@ namespace mongo {
                     _mutex[type]->unlock();
                 }
             }
-        }
-        
-        static void init() {
-            while ( (int)_mutex.size() < CRYPTO_num_locks() )
-                _mutex.push_back( new SimpleMutex("SSLThreadInfo") );
-        }
 
             static void init() {
                 while ( (int)_mutex.size() < CRYPTO_num_locks() )
@@ -116,26 +113,13 @@ namespace mongo {
             return SSLThreadInfo::get()->id();
         }
 
-    private:
-        unsigned _id;
-        
-        static AtomicUInt _next;
-        static std::vector<SimpleMutex*> _mutex;
-        static boost::thread_specific_ptr<SSLThreadInfo> _thread;
-    };
+        void _ssl_locking_callback(int mode, int type, const char *file, int line) {
+            SSLThreadInfo::get()->lock_callback( mode , type , file , line );
+        }
 
-    static unsigned long _ssl_id_callback() {
-        return SSLThreadInfo::get()->id();
-    }
-    static void _ssl_locking_callback(int mode, int type, const char *file, int line) {
-        SSLThreadInfo::get()->lock_callback( mode , type , file , line );
-    }
-
-    AtomicUInt SSLThreadInfo::_next;
-    std::vector<SimpleMutex*> SSLThreadInfo::_mutex;
-    boost::thread_specific_ptr<SSLThreadInfo> SSLThreadInfo::_thread;
-    
-    ////////////////////////////////////////////////////////////////
+        AtomicUInt SSLThreadInfo::_next;
+        std::vector<boost::recursive_mutex*> SSLThreadInfo::_mutex;
+        boost::thread_specific_ptr<SSLThreadInfo> SSLThreadInfo::_thread;
 
         ////////////////////////////////////////////////////////////////
 
@@ -403,25 +387,10 @@ namespace mongo {
  
         SSLThreadInfo::init();
         SSLThreadInfo::get();
-
-        _context = SSL_CTX_new(SSLv23_method());
-        massert(15864,
-                mongoutils::str::stream() << "can't create SSL Context: " <<
-                _getSSLErrorMessage(ERR_get_error()),
-                _context);
-
-        // Activate all bug workaround options, to support buggy client SSL's.
-        SSL_CTX_set_options(_context, SSL_OP_ALL);
-
-        // If renegotiation is needed, don't return from recv() or send() until it's successful.
-        // Note: this is for blocking sockets only.
-        SSL_CTX_set_mode(_context, SSL_MODE_AUTO_RETRY);
-
-        // Disable session caching (see SERVER-10261)
-        SSL_CTX_set_session_cache_mode(_context, SSL_SESS_CACHE_OFF);
-
-        CRYPTO_set_id_callback(_ssl_id_callback);
-        CRYPTO_set_locking_callback(_ssl_locking_callback);
+ 
+        if (!_initSSLContext(&_clientContext, params)) {
+            uasserted(16768, "ssl initialization problem"); 
+        }
 
         // SSL client specific initialization
         if (!isServer) {

@@ -2,7 +2,6 @@
 
 /**
 *    Copyright (C) 2009 10gen Inc.
-*    Copyright (C) 2013 Tokutek Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -99,7 +98,7 @@ namespace mongo {
                 a += 64 * 1024 * 1024;
             DEV if( a > 256*1024*1024 ) { 
                 log() << "dur AlignedBuilder too big, aborting in _DEBUG build" << endl;
-                ::abort();
+                abort();
             }
             wassert( a <= 256*1024*1024 );
             verify( a <= 512*1024*1024 );
