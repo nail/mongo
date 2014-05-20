@@ -1,7 +1,7 @@
 // count.cpp
 
 /**
- *    Copyright (C) 2008 10gen Inc.
+ *    Copyright (C) 2013 MongoDB Inc.
  *    Copyright (C) 2013 Tokutek Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
@@ -30,6 +30,7 @@
  */
 
 #include "mongo/db/ops/count.h"
+
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/collection.h"
@@ -64,19 +65,20 @@ namespace mongo {
     } _countPlanPolicies;
 
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
+        Lock::assertAtLeastReadLocked(ns);
         Collection *cl = getCollection( ns );
+
         if (cl == NULL) {
             err = "ns missing";
             return -1;
         }
-        BSONObj query = cmd.getObjectField("query");
 
-        long long count = 0;
+        BSONObj query = cmd.getObjectField("query");
         long long skip = cmd["skip"].numberLong();
         long long limit = cmd["limit"].numberLong();
 
-        if ( limit < 0 ) {
-            limit  = -limit;
+        if (limit < 0) {
+            limit = -limit;
         }
 
         OpSettings settings;
@@ -84,41 +86,43 @@ namespace mongo {
         settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        Lock::assertAtLeastReadLocked(ns);
         try {
-            for (shared_ptr<Cursor> cursor = getOptimizedCursor( ns, query, BSONObj(), _countPlanPolicies );
+            long long count = 0;
+            for (shared_ptr<Cursor> cursor = getOptimizedCursor(ns, query, BSONObj(), _countPlanPolicies);
                  cursor->ok() ; cursor->advance() ) {
-                if ( cursor->currentMatches() && !cursor->getsetdup( cursor->currPK() ) ) {
-                    if ( skip > 0 ) {
+                if (cursor->currentMatches() && !cursor->getsetdup(cursor->currPK())) {
+                    if (skip > 0) {
                         --skip;
                     }
                     else {
                         ++count;
-                        if ( limit > 0 && count >= limit ) {
+                        // Fast-path. There's no point in iterating all over the cursor if limit
+                        // is set.
+                        if (count >= limit && limit != 0) {
                             break;
                         }
                     }
                 }
             }
+
+            // Emulate old behavior and return the count even if the cursor was killed.  This
+            // happens when the underlying collection is dropped.
             return count;
         }
-        catch ( const DBException &e ) {
+        catch (const DBException &e) {
             err = e.toString();
             errCode = e.getCode();
-            count = -2;
-        }
-        catch ( const std::exception &e ) {
+        } 
+        catch (const std::exception &e) {
             err = e.what();
             errCode = 0;
-            count = -2;
-        }
-        if ( count == -2 ) {
-            // Historically we have returned zero in many count assertion cases - see SERVER-2291.
-            log() << "Count with ns: " << ns << " and query: " << query
-                  << " failed with exception: " << err << " code: " << errCode
-                  << endl;
-        }
-        return count;
-    }
+        } 
 
-} // namespace mongo
+        // Historically we have returned zero in many count assertion cases - see SERVER-2291.
+        log() << "Count with ns: " << ns << " and query: " << query
+              << " failed with exception: " << err << " code: " << errCode
+              << endl;
+
+        return -2;
+    }
+    
