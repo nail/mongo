@@ -33,29 +33,17 @@
 
 #include "mongo/db/ops/update.h"
 
-#include <cstring>  // for memcpy
-
 #include "mongo/bson/mutable/algorithm.h"
 #include "mongo/bson/mutable/damage_vector.h"
 #include "mongo/bson/mutable/document.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/index_set.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update_driver.h"
 #include "mongo/db/ops/update_executor.h"
 #include "mongo/db/ops/update_lifecycle.h"
-#include "mongo/db/pagefault.h"
-#include "mongo/db/pdfile.h"
-#include "mongo/db/query/get_runner.h"
-#include "mongo/db/query/lite_parsed_query.h"
-#include "mongo/db/query/query_planner_common.h"
-#include "mongo/db/query/runner_yield_policy.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/repl/is_master.h"
-#include "mongo/db/repl/oplog.h"
-#include "mongo/db/storage/record.h"
-#include "mongo/db/structure/collection.h"
+#include "mongo/db/oplog.h"
 #include "mongo/platform/unordered_set.h"
 
 namespace mongo {
@@ -496,15 +484,14 @@ namespace mongo {
             CanonicalQuery* cq) {
 
         LOG(3) << "processing update : " << request;
+
+        std::auto_ptr<CanonicalQuery> cqHolder(cq);
         const NamespaceString& nsString = request.getNamespaceString();
         UpdateLifecycle* lifecycle = request.getLifecycle();
-        const CurOp* curOp = cc().curop();
-        Collection* collection = cc().database()->getCollection(nsString.ns());
+        Collection *cl = getCollection(nsString.ns());
 
         validateUpdate(nsString.ns().c_str(), request.getUpdates(), request.getQuery());
 
-        const CurOp* curOp = cc().curop();
-        Collection* collection = cc().database()->getCollection(nsString.ns());
 
         // TODO: This seems a bit circuitious.
         opDebug->updateobj = request.getUpdates();
@@ -524,33 +511,6 @@ namespace mongo {
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
 
-        Runner* rawRunner;
-        if (!getRunner(collection, cq, &rawRunner).isOK()) {
-            uasserted(17243, "could not get runner " + request.getQuery().toString());
-        }
-
-        // Create the runner and setup all deps.
-        auto_ptr<Runner> runner(rawRunner);
-
-        // Register Runner with ClientCursor
-        ClientCursor::registerRunner(runner.get());
-
-        // Cleanup the runner if needed
-        const scoped_ptr<DeregisterEvenIfUnderlyingCodeThrows> safety(
-                new DeregisterEvenIfUnderlyingCodeThrows(runner.get()));
-
-        // Use automatic yield policy
-        runner->setYieldPolicy(Runner::YIELD_AUTO);
-
-        // If the update was marked with '$isolated' (a.k.a '$atomic'), we are not allowed to
-        // yield while evaluating the update loop below.
-        //
-        // TODO: Old code checks this repeatedly within the update loop. Is that necessary? It seems
-        // that once atomic should be always atomic.
-        const bool isolated =
-            (cq && QueryPlannerCommon::hasNode(cq->root(), MatchExpression::ATOMIC)) ||
-            LiteParsedQuery::isQueryIsolated(request.getQuery());
-
         //
         // We'll start assuming we have one or more documents for this update. (Otherwise,
         // we'll fall-back to insert case (if upsert is true).)
@@ -563,7 +523,7 @@ namespace mongo {
         // keep track of the necessary stats. Recall that we'll be pulling documents out of
         // cursors and some of them do not deduplicate the entries they generate. We have
         // deduping logic in here, too -- for now.
-        unordered_set<DiskLoc, DiskLoc::Hasher> seenLocs;
+        unordered_set<BSONObj> seenPKs;
         int numMatched = 0;
 
         // If the update was in-place, we may see it again.  This only matters if we're doing
@@ -595,38 +555,13 @@ namespace mongo {
 
         // Used during iteration of docs
         BSONObj oldObj;
-        DiskLoc loc;
-
-        // Get first doc, and location
-        Runner::RunnerState state = runner->getNext(&oldObj, &loc);
-        while (Runner::RUNNER_ADVANCED == state) {
+        BSONObj pk;
 
         uassert(ErrorCodes::NotMaster,
                 mongoutils::str::stream() << "Not primary while updating " << nsString.ns(),
                 !request.shouldCallLogOp() || isMasterNs(nsString.ns().c_str()));
 
-        while (true) {
-            // See if we have a write in isolation mode
-            isolationModeWriteOccured = isolated && (opDebug->nModified > 0);
-
-            // Change to manual yielding (no yielding) if we have written in isolation mode
-            if (isolationModeWriteOccured) {
-                runner->setYieldPolicy(Runner::YIELD_MANUAL);
-            }
-
-            // keep track of the yield count before calling getNext (which might yield).
-            oldYieldCount = curOp->numYields();
-
-            // Get next doc, and location
-            DiskLoc loc;
-            state = runner->getNext(&oldObj, &loc);
-            const bool didYield = (oldYieldCount != curOp->numYields());
-
-            if (state != Runner::RUNNER_ADVANCED) {
-                if (state == Runner::RUNNER_EOF) {
-                    if (didYield)
-                        uassertStatusOK(recoverFromYield(request, driver, collection));
-
+        for (... cursor stuff ...) {
             // Skips this document if it:
             // a) doesn't match the query portion of the update
             // b) was deemed duplicate by the underlying cursor machinery
@@ -650,7 +585,7 @@ namespace mongo {
                 // c)
                 cursor->advance();
                 if ( dedupHere ) {
-                    if ( seenLocs.count( loc ) ) {
+                    if ( seenPKs.count( loc ) ) {
                         continue;
                     }
                 }
@@ -744,7 +679,7 @@ namespace mongo {
             // This code flow is admittedly odd. But, right now, journaling is baked in the file
             // manager. And if we aren't using the file manager, we have to do jounaling
             // ourselves.
-            bool objectWasChanged = false;
+            bool docWasModified = false;
             BSONObj newObj;
             const char* source = NULL;
             bool inPlace = doc.getInPlaceUpdates(&damages, &source);
@@ -754,7 +689,7 @@ namespace mongo {
             if ((!inPlace || !damages.empty()) ) {
                 if (!(request.isFromReplication() || request.isFromMigration())) {
                     const std::vector<FieldRef*>* immutableFields = NULL;
-                    if (const UpdateLifecycle* lifecycle = request.getLifecycle())
+                    if (lifecycle)
                         immutableFields = lifecycle->getImmutableFields();
 
                     uassertStatusOK(validate(oldObj,
@@ -774,8 +709,9 @@ namespace mongo {
                 // no work to do, in which case we want to consider the object unchanged.
                 if (!damages.empty() ) {
 
-                    collection->details()->paddingFits();
-
+#if 0
+                    // MAKE SURE THINGS CAN BE USED OK IN TOKUMX
+                    //
                     // All updates were in place. Apply them via durability and writing pointer.
                     mutablebson::DamageVector::const_iterator where = damages.begin();
                     const mutablebson::DamageVector::const_iterator end = damages.end();
@@ -786,7 +722,8 @@ namespace mongo {
                             where->size);
                         std::memcpy(targetPtr, sourcePtr, where->size);
                     }
-                    objectWasChanged = true;
+#endif
+                    docWasModified = true;
                     opDebug->fastmod = true;
                 }
 
@@ -830,54 +767,12 @@ namespace mongo {
                       NULL, request.isFromMigration(), &newObj);
             }
 
-            // If it was noop since the document didn't change, record that.
-            if (!objectWasChanged)
-                opDebug->nupdateNoops++;
+            // Only record doc modifications if they wrote (exclude no-ops)
+            if (docWasModified)
+                opDebug->nModified++;
 
             if (!request.isMulti()) {
                 break;
-            }
-
-            // Opportunity for journaling to write during the update.
-            getDur().commitIfNeeded();
-
-            // Disable yielding if isolate with write done
-            const int numChanged = numMatched - opDebug->nupdateNoops;
-
-            // See if we have a write in isolation mode
-            const bool isolationModeWriteOccured = isolated && (numChanged > 0);
-
-            // Change to manual yielding (no yielding) if we have written in isolation mode
-            if (isolationModeWriteOccured) {
-                runner->setYieldPolicy(Runner::YIELD_MANUAL);
-            }
-
-            // Keep track of yield count so we can see if one happens on the getNext() call
-            const int oldYieldCount = curOp->numYields();
-
-            // Get next doc, and location
-            state = runner->getNext(&oldObj, &loc);
-
-            // Refresh things after a yield.
-            const bool didYield = (oldYieldCount != curOp->numYields());
-            if (!isolationModeWriteOccured && didYield) {
-
-                // We yielded and recovered OK, and our cursor is still good. Details about
-                // our namespace may have changed while we were yielded, so we re-acquire
-                // them here. If we can't do so, escape the update loop. Otherwise, refresh
-                // the driver so that it knows about what is currently indexed.
-                const UpdateLifecycle* lifecycle = request.getLifecycle();
-                collection = cc().database()->getCollection(nsString.ns());
-                if (!collection || (lifecycle && !lifecycle->canContinue())) {
-                    uasserted(17270,
-                              "Update aborted due to invalid state transitions after yield.");
-                }
-
-                if (lifecycle && lifecycle->canContinue()) {
-                    IndexPathSet indexes;
-                    lifecycle->getIndexKeys(&indexes);
-                    driver->refreshIndexKeys(indexes);
-                }
             }
         }
 
@@ -886,7 +781,8 @@ namespace mongo {
             opDebug->nMatched = numMatched;
             return UpdateResult(numMatched > 0 /* updated existing object(s) */,
                                 !driver->isDocReplacement() /* $mod or obj replacement */,
-                                numMatched /* # of docments update, even no-ops */,
+                                opDebug->nModified /* number of modified docs, no no-ops */,
+                                numMatched /* # of docs matched/updated, even no-ops */,
                                 BSONObj());
         }
 
@@ -928,7 +824,10 @@ namespace mongo {
             }
         }
         else {
-            original = request.getQuery();
+            fassert(17354, CanonicalQuery::isSimpleIdQuery(request.getQuery()));
+            BSONElement idElt = request.getQuery()["_id"];
+            original = idElt.wrap();
+            fassert(17352, doc.root().appendElement(idElt));
         }
 
         // Apply the update modifications and then log the update as an insert manually.
@@ -945,7 +844,7 @@ namespace mongo {
         // that contains all the immutable keys and can be stored.
         if (!(request.isFromReplication() || request.isFromMigration())){
             const std::vector<FieldRef*>* immutableFields = NULL;
-            if (const UpdateLifecycle* lifecycle = request.getLifecycle())
+            if (lifecycle)
                 immutableFields = lifecycle->getImmutableFields();
 
             // This will only validate the modified fields if not a replacement.
@@ -981,6 +880,7 @@ namespace mongo {
         opDebug->nMatched = 1;
         return UpdateResult(false /* updated a non existing document */,
                             !driver->isDocReplacement() /* $mod or obj replacement? */,
+                            1 /* docs written*/,
                             1 /* count of updated documents */,
                             newObj /* object that was upserted */ );
     }
