@@ -46,6 +46,7 @@ namespace mongo {
     void logProcessDetails() {
         log() << mongodVersion() << endl;
         printGitVersion();
+        printTokukvVersion();
         printOpenSSLVersion();
         printSysInfo();
         printAllocator();

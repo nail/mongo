@@ -339,8 +339,8 @@ if (BUILD_TESTING)
       util/builder_test
       util/bson_extract_test
       mutable/mutable_bson_test
-      mutable/mutable_bson_heap_test
-      mutable/mutable_bson_builder_test
+      #mutable/mutable_bson_heap_test
+      #mutable/mutable_bson_builder_test
       mutable/mutable_bson_algo_test
       bson_field_test
       bson_validate_test

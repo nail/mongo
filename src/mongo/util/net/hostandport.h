@@ -18,6 +18,7 @@
 #pragma once
 
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/cmdline.h"
 #include "mongo/db/server_options.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/net/sock.h"
@@ -81,7 +82,7 @@ namespace mongo {
         int port() const {
             if (hasPort())
                 return _port;
-            return ServerGlobalParams::DefaultDBPort;
+            return CmdLine::DefaultDBPort;
         }
         bool hasPort() const {
             return _port >= 0;
@@ -97,7 +98,7 @@ namespace mongo {
     };
 
     inline HostAndPort HostAndPort::me() {
-        const char* ips = serverGlobalParams.bind_ip.c_str();
+        const char* ips = cmdLine.bind_ip.c_str();
         while(*ips) {
             string ip;
             const char * comma = strchr(ips, ',');
@@ -109,7 +110,7 @@ namespace mongo {
                 ip = string(ips);
                 ips = "";
             }
-            HostAndPort h = HostAndPort(ip, serverGlobalParams.port);
+            HostAndPort h = HostAndPort(ip, cmdLine.port);
             if (!h.isLocalHost()) {
                 return h;
             }
@@ -118,7 +119,7 @@ namespace mongo {
         string h = getHostName();
         verify( !h.empty() );
         verify( h != "localhost" );
-        return HostAndPort(h, serverGlobalParams.port);
+        return HostAndPort(h, cmdLine.port);
     }
 
     inline string HostAndPort::toString( bool includePort ) const {

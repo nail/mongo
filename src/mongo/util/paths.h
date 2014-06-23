@@ -72,7 +72,7 @@ namespace mongo {
         bool operator<(const RelativePath& r) const { return _p < r._p; }
 
         string asFullPath() const {
-            boost::filesystem::path x(storageGlobalParams.dbpath);
+            boost::filesystem::path x(dbpath);
             x /= _p;
             return x.string();
         }

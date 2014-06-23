@@ -197,7 +197,7 @@ namespace mongo {
                     p->psock->clearCounters();
 
                     if ( ! p->recv(m) ) {
-                        if (!serverGlobalParams.quiet) {
+                        if (!cmdLine.quiet) {
                             int conns = Listener::globalTicketHolder.used()-1;
                             const char* word = (conns == 1 ? " connection" : " connections");
                             log() << "end connection " << otherSide << " (" << conns << word << " now open)" << endl;

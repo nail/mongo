@@ -311,7 +311,7 @@ namespace mongo {
                     root->add( s.getValue() );
                 }
                 else if ( mongoutils::str::equals( "text", rest ) ) {
-                    uasserted(0, "text matching not supported");
+                    uasserted(17356, "text matching not supported");
                 }
                 else if ( mongoutils::str::equals( "comment", rest ) ) {
                 }
