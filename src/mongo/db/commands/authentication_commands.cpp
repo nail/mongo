@@ -22,6 +22,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/client/sasl_client_authenticate.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -140,6 +141,9 @@ namespace mongo {
         string pwd;
         Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
                 dbname, PrincipalName(user, dbname), &userObj);
+        // We hard code MONGODB-CR here because that's the only auth mechanism we
+        // there is until we support ssl.
+        audit::logAuthentication(ClientBasic::getCurrent(), "MONGODB-CR", user, status.code());
         if (!status.isOK()) {
             log() << status.reason() << std::endl;
             errmsg = "auth fails";

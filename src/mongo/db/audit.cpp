@@ -25,6 +25,11 @@
 namespace mongo {
 namespace audit {
 
+    void logAuthentication(ClientBasic* client,
+                           const StringData& mechanism,
+                           const std::string& user,
+                           ErrorCodes::Error result) MONGO_AUDIT_STUB
+
     void logCommandAuthzCheck(ClientBasic* client,
                               const NamespaceString& ns,
                               const BSONObj& cmdObj,
@@ -94,31 +99,31 @@ namespace audit {
     void logCreateIndex(ClientBasic* client,
                         const BSONObj* indexSpec,
                         const StringData& indexname,
-                        const StringData& dbname) MONGO_AUDIT_STUB
+                        const StringData& nsname) MONGO_AUDIT_STUB
 
     void logCreateCollection(ClientBasic* client,
-                             const StringData& dbname) MONGO_AUDIT_STUB
+                             const StringData& nsname) MONGO_AUDIT_STUB
 
     void logCreateDatabase(ClientBasic* client,
-                           const StringData& dbname) MONGO_AUDIT_STUB
+                           const StringData& nsname) MONGO_AUDIT_STUB
 
 
     void logDropIndex(ClientBasic* client,
                       const StringData& indexname,
-                      const StringData& dbname) MONGO_AUDIT_STUB
+                      const StringData& nsname) MONGO_AUDIT_STUB
 
     void logDropCollection(ClientBasic* client,
-                           const StringData& dbname) MONGO_AUDIT_STUB
+                           const StringData& nsname) MONGO_AUDIT_STUB
 
     void logDropDatabase(ClientBasic* client,
-                         const StringData& dbname) MONGO_AUDIT_STUB
+                         const StringData& nsname) MONGO_AUDIT_STUB
 
     void logRenameCollection(ClientBasic* client,
                              const StringData& source,
                              const StringData& target) MONGO_AUDIT_STUB
 
     void logEnableSharding(ClientBasic* client,
-                           const StringData& dbname) MONGO_AUDIT_STUB
+                           const StringData& nsname) MONGO_AUDIT_STUB
 
     void logAddShard(ClientBasic* client,
                      const StringData& name,

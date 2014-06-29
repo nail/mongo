@@ -16,6 +16,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/base/init.h"
@@ -79,6 +80,8 @@ namespace mongo {
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
             }
+            
+            audit::logCreateCollection(currentClient.get(), ns);
 
             shared_ptr<Collection> newCollection(Collection::make(ns, options));
             cm->add_ns(ns, newCollection);
@@ -1087,6 +1090,8 @@ namespace mongo {
 
         IndexDetails &idx = _cd->idx(idxNum);
 
+        audit::logDropIndex(currentClient.get(), idx.indexName(), idx.parentNS());
+
         // Remove this index from the system catalogs
         removeFromNamespacesCatalog(idx.indexNamespace());
         if (nsToCollectionSubstring(_ns) != "system.indexes") {
@@ -1159,6 +1164,8 @@ namespace mongo {
                 uasserted(12502, "can't drop system ns");
             }
         }
+
+        audit::logDropCollection(currentClient.get(), _ns);
 
         // Invalidate cursors, then drop all of the indexes.
         ClientCursor::invalidate(_ns);
@@ -1526,6 +1533,8 @@ namespace mongo {
                         from != cc().bulkLoadNS() );
         uassert( 16918, "Cannot rename a collection with a background index build in progress",
                         !from_cl->indexBuildInProgress() );
+
+        audit::logRenameCollection(currentClient.get(), from, to);
 
         shared_ptr<CollectionRenamer> renamer = from_cl->getRenamer();
 
