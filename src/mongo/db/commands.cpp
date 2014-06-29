@@ -198,6 +198,22 @@ namespace mongo {
         }
     }
 
+    Status Command::checkAuthForCommand(ClientBasic* client,
+                                        const std::string& dbname,
+                                        const BSONObj& cmdObj) {
+        std::vector<Privilege> privileges;
+        this->addRequiredPrivileges(dbname, cmdObj, &privileges);
+        return client->getAuthorizationManager()->checkAuthForPrivileges(privileges);
+    }
+
+    void Command::appendCommandStatus(BSONObjBuilder& result, const Status& status) {
+        appendCommandStatus(result, status.isOK(), status.reason());
+        BSONObj tmp = result.asTempObj();
+        if (!status.isOK() && !tmp.hasField("code")) {
+            result.append("code", status.code());
+        }
+    }
+
     void Command::logIfSlow( const Timer& timer, const string& msg ) {
         int ms = timer.millis();
         if ( ms > cmdLine.slowMS ) {

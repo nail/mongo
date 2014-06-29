@@ -2094,31 +2094,10 @@ namespace mongo {
 
         std::string dbname = nsToDatabase( cmdns );
 
-        if (c->adminOnly() && c->localHostOnlyIfNoAuth(cmdObj) && noauth &&
-                !client.getIsLocalHostConnection()) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result,
-                                false,
-                                "unauthorized: this command must run from localhost when running "
-                                "db without auth");
+        Status status = _checkAuthorization(c, &client, dbname, cmdObj, fromRepl);
+        if (!status.isOK()) {
+            appendCommandStatus(result, status);
             return;
-        }
-
-        if ( c->adminOnly() && ! fromRepl && dbname != "admin" ) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result, false, "access denied; use admin db");
-            return;
-        }
-
-        if (!noauth && c->requiresAuth()) {
-            std::vector<Privilege> privileges;
-            c->addRequiredPrivileges(dbname, cmdObj, &privileges);
-            Status status = client.getAuthorizationManager()->checkAuthForPrivileges(privileges);
-            if (!status.isOK()) {
-                log() << "command denied: " << cmdObj.toString() << endl;
-                appendCommandStatus(result, false, status.reason());
-                return;
-            }
         }
 
         if ( cmdObj["help"].trueValue() ) {
