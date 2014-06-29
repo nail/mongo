@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -204,6 +205,51 @@ namespace mongo {
         }
     }
 
+    static Status _checkAuthorizationImpl(Command* c,
+                                          ClientBasic* client,
+                                          const std::string& dbname,
+                                          const BSONObj& cmdObj,
+                                          bool fromRepl) {
+        if ( c->adminOnly() && ! fromRepl && dbname != "admin" ) {
+            return Status(ErrorCodes::Unauthorized, str::stream() << c->name <<
+                          " may only be run against the admin database.");
+        }
+        if (!noauth) {
+            Status status = c->checkAuthForCommand(client, dbname, cmdObj);
+            if (status == ErrorCodes::Unauthorized) {
+                return Status(ErrorCodes::Unauthorized,
+                              str::stream() << "not authorized on " << dbname <<
+                              " to execute command " << cmdObj);
+            }
+            if (!status.isOK()) {
+                return status;
+            }
+        }
+        else if (c->adminOnly() &&
+                 c->localHostOnlyIfNoAuth(cmdObj) &&
+                 !client->getIsLocalHostConnection()) {
+
+            return Status(ErrorCodes::Unauthorized, str::stream() << c->name <<
+                          " must run from localhost when running db without auth");
+        }
+        return Status::OK();
+    }
+
+    Status Command::_checkAuthorization(Command* c,
+                                        ClientBasic* client,
+                                        const std::string& dbname,
+                                        const BSONObj& cmdObj,
+                                        bool fromRepl) {
+        Status status = _checkAuthorizationImpl(c, client, dbname, cmdObj, fromRepl);
+        if (!status.isOK()) {
+            log() << status << std::endl;
+        }
+        audit::logCommandAuthzCheck(client,
+                                    NamespaceString(c->parseNs(dbname, cmdObj)),
+                                    cmdObj,
+                                    status.code());
+        return status;
+    }
 }
 
 #include "../client/connpool.h"
